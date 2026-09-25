@@ -1,1 +1,3 @@
 dist/
+# The root .gitignore ignores .env.*; keep the example tracked.
+!.env.example

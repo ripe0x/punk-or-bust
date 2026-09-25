@@ -157,10 +157,14 @@ mainnet() {
     *) die "DEPLOY_SIGNER_ARGS must use --ledger or --account" ;;
   esac
   case " $DEPLOY_SIGNER_ARGS " in
-    *--private-key* | *" --mnemonic "* | *" --mnemonics "* | *--interactive* | *" -i "* | *0x*)
+    *--private-key* | *" --mnemonic "* | *" --mnemonics "* | *--interactive* | *" -i "*)
       die "raw keys and mnemonics are not accepted"
       ;;
   esac
+  # A raw 32-byte hex key anywhere in the args (a keystore name such as "ripe0x" is fine).
+  if grep -qE '(0x)?[0-9a-fA-F]{64}' <<<"$DEPLOY_SIGNER_ARGS"; then
+    die "raw keys and mnemonics are not accepted"
+  fi
 
   [ -z "$(git status --porcelain)" ] || die "checkout is not clean"
   [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"

@@ -12,6 +12,7 @@
     "abi": "node scripts/abi.mjs"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "^5.103.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

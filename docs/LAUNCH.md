@@ -67,7 +67,7 @@ four show as verified; rerun a failed one by hand with the same arguments.
   placeholders): `fly secrets set RPC_URL=... SEND_RPC_URL=... KEEPER_PRIVATE_KEY=...
   FACTORY=<factory> FROM_BLOCK=<deploy block>`, optional `ALERT_WEBHOOK_URL`. Use different RPC
   providers for the two apps. `fly deploy -c <file>` from `keeper/`, then check `/health`.
-- [ ] Web: in Netlify (base directory `web`, `web/netlify.toml`) set `VITE_RPC_URL`,
+- [ ] Web: in Netlify (base directory `web`, `netlify.toml` (repo root, base `web`)) set `VITE_RPC_URL`,
   `VITE_FACTORY=<factory>`, `VITE_FROM_BLOCK=<deploy block>`, optional `VITE_DEFAULT_KEEPER`, and
   deploy. The RPC URL ships in the bundle; restrict its key to the site's domain.
 - [ ] Smoke test: create a small vault (for example 0.02 ETH, one pull, low drawdown) from the site,
