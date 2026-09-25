@@ -1,6 +1,6 @@
 import { decodeEventLog, type Address, type Hex, type Log } from 'viem';
 import { vaultAbi } from '../abi/Vault';
-import { FORCED_KIND, formatBps, formatEth, formatGwei, formatTimestamp, pullStatusLabel, shortAddr } from './format';
+import { FORCED_KIND, formatBps, shortId, formatEth, formatGwei, formatTimestamp, pullStatusLabel, shortAddr } from './format';
 import type { KeepList, KeepToken } from './keepList';
 
 export interface VaultEvent {
@@ -56,7 +56,7 @@ export function sortEvents<T extends { blockNumber: bigint; logIndex: number }>(
 }
 
 const eth = (v: unknown) => `${formatEth(v as bigint)} ETH`;
-const id = (v: unknown) => `#${String(v)}`;
+const id = (v: unknown) => shortId(v as bigint);
 
 /** One readable line per vault event. Null for events the feed does not show. */
 export function describeEvent(e: VaultEvent): Omit<FeedItem, 'key' | 'txHash' | 'address' | 'blockNumber'> | null {

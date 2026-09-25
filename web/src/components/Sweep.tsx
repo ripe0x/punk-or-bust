@@ -5,7 +5,7 @@ import { vaultAbi } from '../abi/Vault';
 import { fwaAbi } from '../abi/IFWA';
 import { useTx } from '../hooks/useTx';
 import { forcedNfts, type VaultEvent } from '../lib/events';
-import { FORCED_KIND } from '../lib/format';
+import { FORCED_KIND, shortId } from '../lib/format';
 import { Addr, Field, Section, TxLink, TxStatus } from './ui';
 
 /** Forced and stuck NFTs the vault may hold, and the owner's sweep form. */
@@ -38,7 +38,7 @@ export function Sweep({ vault, fwa, events }: { vault: Address; fwa: Address; ev
             return (
               <li key={f.requestId.toString()} className="row wrap">
                 <span>
-                  {FORCED_KIND[f.kind]}: listing #{f.listingId.toString()}
+                  {FORCED_KIND[f.kind]}: listing {shortId(f.listingId)}
                   {c ? (
                     <>
                       {' '}

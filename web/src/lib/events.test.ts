@@ -73,7 +73,7 @@ describe('toFeed', () => {
       'Sold back',
     ]);
     expect(feed[0].detail).toContain('1.2 ETH');
-    expect(feed.every((f) => !/[–—]/.test(f.title + f.detail))).toBe(true);
+    expect(feed.every((f) => !/[\u2013\u2014]/.test(f.title + f.detail))).toBe(true);
   });
 });
 

@@ -87,3 +87,9 @@ export function vaultStatusLabel(n: number): string {
 export function pullStatusLabel(n: number): string {
   return PULL_STATUS[n] ?? `Unknown (${n})`;
 }
+
+/** Request and listing ids can be 77 digit hashes; long ones show as "#123456...7890". */
+export function shortId(id: bigint | number | string): string {
+  const s = String(id);
+  return s.length > 12 ? `#${s.slice(0, 6)}...${s.slice(-4)}` : `#${s}`;
+}

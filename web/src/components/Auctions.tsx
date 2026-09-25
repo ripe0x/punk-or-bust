@@ -6,7 +6,7 @@ import { useOpenAuctions, type OpenAuction } from '../hooks/useAuctions';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { bidExtends, minNextBid, secondsLeft } from '../lib/auction';
-import { formatDuration, formatEth, parseEthInput } from '../lib/format';
+import { formatDuration, formatEth, parseEthInput, shortId } from '../lib/format';
 import { Addr, Eth, Section, TxStatus } from './ui';
 
 export function Auctions() {
@@ -55,7 +55,7 @@ function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address
     <article className="auction">
       <div className="auction-head">
         <div>
-          {a.collection ? <Addr address={a.collection} /> : <span className="muted">Listing #{a.listingId.toString()}</span>}
+          {a.collection ? <Addr address={a.collection} /> : <span className="muted">Listing {shortId(a.listingId)}</span>}
           {a.tokenId !== undefined ? <span className="mono"> #{a.tokenId.toString()}</span> : null}
         </div>
         <span className={`pill ${ended ? 'pill-idle' : left < 300 ? 'pill-warn' : 'pill-good'}`}>{ended ? 'Ended' : formatDuration(left)}</span>
@@ -81,7 +81,7 @@ function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address
         </dd>
         <dt>Vault</dt>
         <dd>
-          <Addr address={a.vault} /> request #{a.requestId.toString()}
+          <Addr address={a.vault} /> request {shortId(a.requestId)}
         </dd>
       </dl>
       {ended ? (

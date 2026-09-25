@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseEther } from 'viem';
-import { formatBps, formatDuration, formatEth, formatGwei, parseEthInput, parseGweiInput, shortAddr } from './format';
+import { shortId, formatBps, formatDuration, formatEth, formatGwei, parseEthInput, parseGweiInput, shortAddr } from './format';
 
 describe('formatEth', () => {
   it('trims and truncates', () => {
@@ -56,5 +56,12 @@ describe('misc', () => {
   });
   it('short address', () => {
     expect(shortAddr('0x1234567890abcdef1234567890abcdef12345678')).toBe('0x1234...5678');
+  });
+});
+
+describe('shortId', () => {
+  it('shortens hash sized ids only', () => {
+    expect(shortId(42n)).toBe('#42');
+    expect(shortId(10040822812659659874726742871972095502799866678440n)).toBe('#100408...8440');
   });
 });
