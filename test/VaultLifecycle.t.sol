@@ -88,7 +88,7 @@ contract VaultLifecycleTest is VaultTestBase {
         assertEq(escrow, fee, "escrow is the price excluding VRF");
         assertEq(treasury.balance, 0, "no fee at request");
         _allocate(requestId, listingId);
-        vault.sync(32);
+        _ownerSync();
         assertEq(treasury.balance, escrow * FEE_PPM / 1_000_000, "250 ppm of price excluding VRF");
         assertEq(vault.feeOwed(), 0, "paid");
     }
@@ -105,7 +105,7 @@ contract VaultLifecycleTest is VaultTestBase {
         (,,,, uint8 st) = pool.acquisitions(requestId);
         assertEq(st, 3, "expired");
 
-        vault.sync(32);
+        _ownerSync();
         (, Vault.PullStatus pullStatus) = vault.pulls(requestId);
         assertEq(uint8(pullStatus), uint8(Vault.PullStatus.Refunded), "refunded");
         assertEq(treasury.balance, 0, "no fee");
@@ -159,7 +159,7 @@ contract VaultLifecycleTest is VaultTestBase {
 
         uint256[] memory ids = vault.outstanding();
         _allocate(ids[0], first);
-        vault.sync(32);
+        _ownerSync();
 
         // Each sold pull loses about 0.1 ETH; keep pulling until the floor ends the run.
         uint256 pulls = 1;
@@ -169,7 +169,7 @@ contract VaultLifecycleTest is VaultTestBase {
             if (vault.requestPulls(1) == 0) break;
             ids = vault.outstanding();
             _allocate(ids[0], listingId);
-            vault.sync(32);
+            _ownerSync();
             ++pulls;
         }
         assertGt(pulls, 1, "sale proceeds funded more pulls");
@@ -192,7 +192,7 @@ contract VaultLifecycleTest is VaultTestBase {
         uint256 requestId = _requestOne();
         _allocate(requestId, listingId);
         vm.warp(block.timestamp + 7 days + 1);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended by sync");
     }
 
@@ -212,7 +212,7 @@ contract VaultLifecycleTest is VaultTestBase {
         uint256[] memory ids = vault.outstanding();
         _allocate(ids[0], first);
         _allocate(ids[1], second);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "idle once resolved");
         assertEq(address(vault).balance, 0, "returned");
     }
@@ -324,7 +324,9 @@ contract VaultLifecycleTest is VaultTestBase {
 
         (uint256 fee, uint256 total) = _price();
         uint256 unit = total + fee * FEE_PPM / 1_000_000;
-        uint256 expected = start > floor ? (start - floor) / unit : 0;
+        // A paid caller reserves its worst-case gas and bounty above the floor.
+        uint256 reserved = floor + vault.REQUEST_GAS_CAP() * vault.gasCeiling() + vault.bountyWei();
+        uint256 expected = start > reserved ? (start - reserved) / unit : 0;
         if (start / total < expected) expected = start / total;
         if (expected > 5) expected = 5;
 
@@ -333,7 +335,8 @@ contract VaultLifecycleTest is VaultTestBase {
         assertEq(requested, expected, "pulls admitted");
         if (requested != 0) {
             assertGe(vault.runValue(), floor, "value stays at or above floor");
-            assertEq(vault.idle(), start - requested * total, "idle debited by exact cost");
+            assertEq(vault.idle(), start - requested * total - vault.bountyWei(), "idle debited by exact cost");
+            assertEq(keeper.balance, vault.bountyWei(), "bounty paid");
         } else {
             assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run ended");
         }

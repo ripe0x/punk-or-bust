@@ -120,7 +120,13 @@ abstract contract VaultTestBase is FwaV2Harness {
     function _pullAndSync(uint256 listingId) internal returns (uint256 requestId) {
         requestId = _requestOne();
         _allocate(requestId, listingId);
-        vault.sync(32);
+        _ownerSync();
+    }
+
+    /// @notice Syncs as the owner, who is never paid, so accounting assertions stay exact.
+    function _ownerSync() internal returns (uint256) {
+        vm.prank(owner);
+        return vault.sync(32);
     }
 
     /// @notice Lists `tokenId` of a custom collection.

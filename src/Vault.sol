@@ -89,6 +89,15 @@ contract Vault is ReentrancyGuardTransient {
     uint256 public constant SYNC_GAS_CAP = 3_000_000;
     uint256 public constant FINALIZE_GAS_CAP = 1_000_000;
 
+    uint256 public constant DEFAULT_BOUNTY = 0.0003 ether;
+    uint256 public constant DEFAULT_SYNC_BOUNTY_MAX = 0.003 ether;
+    uint256 public constant MAX_BOUNTY = 0.003 ether;
+    uint256 public constant MAX_SYNC_BOUNTY = 0.03 ether;
+    /// @notice Age of the oldest allocated pull a sync resolves at which its bounty reaches the max.
+    uint256 public constant SYNC_BOUNTY_RAMP = 30 minutes;
+    // SPEC: a sync processes at most 8 FWA acquisitions at the head of FWA's sequence.
+    uint256 public constant MAX_PROCESS = 8;
+
     uint256 public constant AUCTION_GAP_BPS = 900;
     uint256 public constant AUCTION_MIN_SURPLUS = 0.01 ether;
     uint256 public constant AUCTION_NO_ORACLE_BACKING = 1 ether;
@@ -102,6 +111,7 @@ contract Vault is ReentrancyGuardTransient {
     // SPEC: at most 8 open auctions per vault; at the cap a miss sells back.
     uint256 public constant MAX_AUCTIONS = 8;
 
+    uint8 internal constant ACQ_PENDING = uint8(IFWA.AcquisitionStatus.Pending);
     uint8 internal constant ACQ_FULFILLED = uint8(IFWA.AcquisitionStatus.Fulfilled);
     uint8 internal constant ACQ_EXPIRED = uint8(IFWA.AcquisitionStatus.Expired);
     uint8 internal constant ACQ_REFUNDED = uint8(IFWA.AcquisitionStatus.Refunded);
@@ -120,7 +130,12 @@ contract Vault is ReentrancyGuardTransient {
     Status public status;
     bool public autoReturn;
     bool public rewardsRegistered;
+    /// @notice When set, only the owner and approved keepers may request pulls, and only approved
+    ///         keepers are paid.
+    bool public privateMode;
     uint256 public gasCeiling;
+    uint256 public bountyWei;
+    uint256 public syncBountyMaxWei;
 
     /// @notice The owner's spendable ETH.
     uint256 public idle;
@@ -142,7 +157,7 @@ contract Vault is ReentrancyGuardTransient {
     mapping(uint256 requestId => Pull) public pulls;
 
     mapping(uint256 requestId => Auction) public auctions;
-    uint256 public openAuctions;
+    uint256[] internal _openAuctionIds;
     /// @notice ETH held for current high bids. Never part of `idle`.
     uint256 public bidEscrow;
     /// @notice Sum of `bidRefunds`. Never part of `idle`.
@@ -180,6 +195,9 @@ contract Vault is ReentrancyGuardTransient {
     event KeeperSet(address indexed keeper, bool approved);
     event AutoReturnSet(bool enabled);
     event GasCeilingSet(uint256 ceiling);
+    event PrivateModeSet(bool enabled);
+    event BountiesSet(uint256 bountyWei, uint256 syncBountyMaxWei);
+    event BountyPaid(address indexed caller, uint256 amount);
     event RewardsRegistered();
     event AuctionStarted(
         uint256 indexed requestId, uint256 indexed listingId, uint256 backstop, uint256 deadline, uint256 hardDeadline
@@ -227,6 +245,8 @@ contract Vault is ReentrancyGuardTransient {
         OWNER = owner_;
         autoReturn = true;
         gasCeiling = DEFAULT_GAS_CEILING;
+        bountyWei = DEFAULT_BOUNTY;
+        syncBountyMaxWei = DEFAULT_SYNC_BOUNTY_MAX;
         _setKeepCollections(collections, true);
         _setKeepTokens(tokens, true);
         _setKeepers(keepers, true);
@@ -272,19 +292,22 @@ contract Vault is ReentrancyGuardTransient {
 
     /// @notice Opens up to `count` pulls, fewer if a run limit or the drawdown floor allows fewer.
     ///         Ends the run instead when a stop condition holds.
+    ///         Anyone may call it unless `privateMode` is set; a paid caller gets gas and `bountyWei`
+    ///         when it opens pulls.
     /// @return requested Pulls opened by this call.
     function requestPulls(uint256 count) external nonReentrant returns (uint256 requested) {
         uint256 gasStart = gasleft();
-        bool byKeeper = msg.sender != OWNER;
-        if (byKeeper && !isKeeper[msg.sender]) revert Unauthorized();
-        // A keeper spends the owner's ETH only at or below the owner's gas ceiling; pull cost rises with gas.
-        if (byKeeper && tx.gasprice > gasCeiling) revert GasPriceTooHigh();
+        bool byOwner = msg.sender == OWNER;
+        bool paid = _eligible();
+        if (!byOwner && !paid) revert Unauthorized();
+        // Anyone but the owner spends the owner's ETH only at or below the owner's gas ceiling.
+        if (!byOwner && tx.gasprice > gasCeiling) revert GasPriceTooHigh();
         if (status != Status.Running) revert BadStatus();
         if (count == 0 || count > MAX_BATCH) revert BadCount();
         _absorb();
 
         RunParams memory p = run;
-        uint256 inFlight = _outstanding.length + openAuctions;
+        uint256 inFlight = _outstanding.length + _openAuctionIds.length;
         if (
             block.timestamp > p.deadline || pullsRequested >= p.maxPulls
                 || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)
@@ -301,7 +324,7 @@ contract Vault is ReentrancyGuardTransient {
             } else {
                 requested = _min(_min(count, MAX_OUTSTANDING - inFlight), p.maxPulls - pullsRequested);
                 // SPEC: the floor check prices each pull at its quote plus the pull fee it would owe.
-                requested = _min(requested, _affordable(total, total + fee * PULL_FEE_PPM / PPM, byKeeper));
+                requested = _min(requested, _affordable(total, total + fee * PULL_FEE_PPM / PPM, paid));
                 if (requested == 0) {
                     // The run ends on the floor only when nothing is in flight.
                     if (inFlight != 0) revert FloorReached();
@@ -312,19 +335,25 @@ contract Vault is ReentrancyGuardTransient {
             }
         }
         _finishIfDone();
-        _reimburse(gasStart, REQUEST_GAS_CAP, false);
+        if (requested != 0) _reimburse(gasStart, REQUEST_GAS_CAP, false, bountyWei);
     }
 
     /// @notice Resolves up to `maxCount` outstanding pulls: routes every reveal (keep list to the
     ///         owner, a miss auction, or sell back), records forced outcomes, and takes refund credit.
-    ///         Auctions are finalized separately by `finalizeAuction`.
-    ///         Permissionless; approved keepers are reimbursed when it resolves something.
+    ///         Auctions are finalized separately by `finalizeAuction`. First advances FWA's
+    ///         acquisition sequence when a pull is still waiting in it.
+    ///         Permissionless; a paid caller gets gas and the sync bounty when it resolves or
+    ///         processes something.
     function sync(uint256 maxCount) external nonReentrant returns (uint256 resolved) {
         uint256 gasStart = gasleft();
         _absorb();
+        bool processed = _processHead();
+        uint256 oldest = type(uint256).max;
         uint256 i;
         while (i < _outstanding.length && resolved < maxCount) {
-            if (_resolve(_outstanding[i])) {
+            (bool done, uint256 allocatedAt) = _resolve(_outstanding[i]);
+            if (done) {
+                if (allocatedAt != 0 && allocatedAt < oldest) oldest = allocatedAt;
                 _outstanding[i] = _outstanding[_outstanding.length - 1];
                 _outstanding.pop();
                 ++resolved;
@@ -339,8 +368,9 @@ contract Vault is ReentrancyGuardTransient {
             RunParams memory p = run;
             if (block.timestamp > p.deadline || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)) _windDown();
         }
+        // SPEC: the caller is paid before auto-return, so the sync that ends a run is paid too.
+        if (resolved != 0 || processed) _reimburse(gasStart, SYNC_GAS_CAP, true, _syncBounty(oldest));
         _finishIfDone();
-        if (resolved != 0) _reimburse(gasStart, SYNC_GAS_CAP, true);
     }
 
     /// @notice Self-call boundary so a failed keep, delivery or sale reverts alone and routing can
@@ -377,8 +407,8 @@ contract Vault is ReentrancyGuardTransient {
 
     /// @notice Ends a miss auction after its deadline. The high bidder gets the NFT and the bid joins
     ///         idle ETH; with no bid or a failed delivery the bid is refunded and the vault sells back.
-    ///         A listing already settled by other means is recorded as forced. Permissionless;
-    ///         approved keepers are reimbursed.
+    ///         A listing already settled by other means is recorded as forced. Permissionless; a paid
+    ///         caller gets gas and `bountyWei`.
     function finalizeAuction(uint256 requestId) external nonReentrant {
         uint256 gasStart = gasleft();
         if (pulls[requestId].status != PullStatus.Auctioning) revert BadStatus();
@@ -387,7 +417,7 @@ contract Vault is ReentrancyGuardTransient {
         uint256 listingId = a.listingId;
         uint256 amount = a.highBid;
         address winner = a.highBidder;
-        --openAuctions;
+        _removeAuction(requestId);
 
         PullStatus outcome = PullStatus.Sold;
         if (FwaClientLib.listing(FWA, listingId).status != LISTING_ALLOCATED) {
@@ -409,8 +439,8 @@ contract Vault is ReentrancyGuardTransient {
 
         _absorb();
         _payFees();
+        _reimburse(gasStart, FINALIZE_GAS_CAP, true, bountyWei);
         _finishIfDone();
-        _reimburse(gasStart, FINALIZE_GAS_CAP, true);
     }
 
     /// @notice Sends the caller's credited bid refunds to `to`.
@@ -465,6 +495,22 @@ contract Vault is ReentrancyGuardTransient {
         if (ceiling == 0 || ceiling > MAX_GAS_CEILING) revert BadParams();
         gasCeiling = ceiling;
         emit GasCeilingSet(ceiling);
+    }
+
+    function setPrivateMode(bool enabled) external onlyOwner nonReentrant {
+        privateMode = enabled;
+        emit PrivateModeSet(enabled);
+    }
+
+    /// @notice Bounties may be raised from the defaults, never lowered below them.
+    function setBounties(uint256 bounty, uint256 syncBountyMax) external onlyOwner nonReentrant {
+        if (
+            bounty < DEFAULT_BOUNTY || bounty > MAX_BOUNTY || syncBountyMax < DEFAULT_SYNC_BOUNTY_MAX
+                || syncBountyMax < bounty || syncBountyMax > MAX_SYNC_BOUNTY
+        ) revert BadParams();
+        bountyWei = bounty;
+        syncBountyMaxWei = syncBountyMax;
+        emit BountiesSet(bounty, syncBountyMax);
     }
 
     /* ------------------------------------------------------------------ */
@@ -526,6 +572,40 @@ contract Vault is ReentrancyGuardTransient {
         return _outstanding.length;
     }
 
+    /// @notice Open miss auctions, counted toward in flight.
+    function openAuctions() public view returns (uint256) {
+        return _openAuctionIds.length;
+    }
+
+    function openAuctionIds() external view returns (uint256[] memory) {
+        return _openAuctionIds;
+    }
+
+    /// @notice For callers deciding when to sync or finalize. `resolvable`: outstanding pulls FWA no
+    ///         longer holds as `Pending` (a sync resolves them or advances FWA's sequence toward them).
+    ///         `oldestAllocatedAt`: earliest FWA allocation among outstanding pulls still allocated,
+    ///         zero if none; it drives the sync bounty. `openAuctionsPastDeadline`: auctions
+    ///         `finalizeAuction` accepts now.
+    function syncStatus()
+        external
+        view
+        returns (uint256 resolvable, uint256 oldestAllocatedAt, uint256 openAuctionsPastDeadline)
+    {
+        for (uint256 i; i < _outstanding.length; ++i) {
+            (, uint256 listingId, uint8 acq) = FwaClientLib.status(FWA, _outstanding[i]);
+            if (acq == ACQ_PENDING) continue;
+            ++resolvable;
+            if (acq != ACQ_FULFILLED) continue;
+            FwaClientLib.ListingSnapshot memory s = FwaClientLib.listing(FWA, listingId);
+            if (s.status == LISTING_ALLOCATED && (oldestAllocatedAt == 0 || s.allocatedAt < oldestAllocatedAt)) {
+                oldestAllocatedAt = s.allocatedAt;
+            }
+        }
+        for (uint256 i; i < _openAuctionIds.length; ++i) {
+            if (block.timestamp >= auctions[_openAuctionIds[i]].deadline) ++openAuctionsPastDeadline;
+        }
+    }
+
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return this.onERC721Received.selector;
     }
@@ -554,10 +634,10 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     /// @dev Pulls whose cost stays above the floor and within idle ETH.
-    ///      A keeper call first reserves its worst-case reimbursement so it cannot cross the floor.
-    function _affordable(uint256 total, uint256 unitCost, bool byKeeper) internal view returns (uint256) {
+    ///      A paid call first reserves its worst-case reimbursement and bounty so it cannot cross the floor.
+    function _affordable(uint256 total, uint256 unitCost, bool paid) internal view returns (uint256) {
         uint256 value = runValue();
-        uint256 floor = runFloor() + (byKeeper ? REQUEST_GAS_CAP * gasCeiling : 0);
+        uint256 floor = runFloor() + (paid ? REQUEST_GAS_CAP * gasCeiling + bountyWei : 0);
         uint256 byFloor = value > floor ? (value - floor) / unitCost : 0;
         return _min(byFloor, idle / total);
     }
@@ -577,15 +657,45 @@ contract Vault is ReentrancyGuardTransient {
         emit PullsRequested(ids, spentPerPull);
     }
 
-    /// @dev True when the pull reached a final outcome and leaves the outstanding set.
-    function _resolve(uint256 requestId) internal returns (bool) {
+    /// @dev Advances FWA's acquisition sequence when an outstanding pull is still in it. True when
+    ///      FWA processed at least one acquisition.
+    // SPEC: bounded by the outstanding count and MAX_PROCESS; a revert is ignored so sync still resolves.
+    function _processHead() internal returns (bool) {
+        uint256 n = _outstanding.length;
+        for (uint256 i; i < n; ++i) {
+            (,, uint8 acq) = FwaClientLib.status(FWA, _outstanding[i]);
+            if (acq != ACQ_FULFILLED && acq != ACQ_EXPIRED && acq != ACQ_REFUNDED) {
+                try IFWA(FWA).processAcquisitions(_min(n, MAX_PROCESS)) returns (uint256 processed) {
+                    return processed != 0;
+                } catch {
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// @dev `bountyWei` rising linearly to `syncBountyMaxWei` as the oldest allocated pull resolved
+    ///      ages from zero to `SYNC_BOUNTY_RAMP` since FWA allocated it.
+    function _syncBounty(uint256 oldest) internal view returns (uint256) {
+        uint256 lo = bountyWei;
+        if (oldest >= block.timestamp) return lo;
+        uint256 age = _min(block.timestamp - oldest, SYNC_BOUNTY_RAMP);
+        return lo + (syncBountyMaxWei - lo) * age / SYNC_BOUNTY_RAMP;
+    }
+
+    /// @dev True when the pull reached a final outcome and leaves the outstanding set, with the FWA
+    ///      allocation time of an allocated pull (zero otherwise).
+    function _resolve(uint256 requestId) internal returns (bool, uint256) {
         (uint256 price, uint256 listingId, uint8 acquisition) = FwaClientLib.status(FWA, requestId);
         PullStatus outcome;
+        uint256 allocatedAt;
         if (acquisition == ACQ_FULFILLED) {
             FwaClientLib.ListingSnapshot memory s = FwaClientLib.listing(FWA, listingId);
+            allocatedAt = s.allocatedAt;
             if (s.status == LISTING_ALLOCATED) {
                 outcome = _route(requestId, listingId, s);
-                if (outcome == PullStatus.None) return false;
+                if (outcome == PullStatus.None) return (false, 0);
             } else {
                 outcome = PullStatus.Forced;
                 emit PullForced(requestId, listingId, FwaClientLib.classifyForced(FWA, listingId));
@@ -595,11 +705,11 @@ contract Vault is ReentrancyGuardTransient {
         } else if (acquisition == ACQ_EXPIRED || acquisition == ACQ_REFUNDED) {
             outcome = PullStatus.Refunded;
         } else {
-            return false;
+            return (false, 0);
         }
         pulls[requestId].status = outcome;
         emit PullResolved(requestId, listingId, outcome);
-        return true;
+        return (true, allocatedAt);
     }
 
     /// @dev Keep list (token entry, then collection) goes to the owner; a failed keep sells back; any
@@ -632,7 +742,7 @@ contract Vault is ReentrancyGuardTransient {
                     deadline: deadline,
                     hardDeadline: hard
                 });
-                ++openAuctions;
+                _openAuctionIds.push(requestId);
                 emit AuctionStarted(requestId, listingId, backstop, deadline, hard);
                 return PullStatus.Auctioning;
             }
@@ -649,7 +759,9 @@ contract Vault is ReentrancyGuardTransient {
     ///      settlement window remains, or the oracle rule (fresh reading) or the backing rule (no
     ///      fresh reading) does not call for one.
     function _auctionEnd(FwaClientLib.ListingSnapshot memory s, uint256 backstop) internal view returns (uint256 hard) {
-        if (openAuctions >= MAX_AUCTIONS || backstop == 0 || FwaClientLib.forcesEthSettlement(s.collection)) return 0;
+        if (_openAuctionIds.length >= MAX_AUCTIONS || backstop == 0 || FwaClientLib.forcesEthSettlement(s.collection)) {
+            return 0;
+        }
         uint256 windowEnd = uint256(s.allocatedAt) + IFWA(FWA).settlementWindow();
         // SPEC: an auction that could not run at least one extension period sells back instead.
         if (windowEnd < block.timestamp + AUCTION_SETTLE_BUFFER + AUCTION_EXTENSION) return 0;
@@ -692,7 +804,7 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     function _finishIfDone() internal {
-        if (status != Status.WindingDown || _outstanding.length != 0 || openAuctions != 0) return;
+        if (status != Status.WindingDown || _outstanding.length != 0 || _openAuctionIds.length != 0) return;
         status = Status.Idle;
         uint256 returned;
         if (autoReturn) {
@@ -725,20 +837,38 @@ contract Vault is ReentrancyGuardTransient {
         SafeTransferLib.forceSafeTransferETH(OWNER, amount);
     }
 
-    /// @dev Approved keepers only, at min(basefee + PRIORITY_CAP, tx.gasprice, gasCeiling), gas capped
-    ///      per function, never more than idle ETH.
-    // SPEC: above the ceiling the keeper is paid at the ceiling, so the part above it is not reimbursed.
+    function _removeAuction(uint256 requestId) internal {
+        uint256 last = _openAuctionIds.length - 1;
+        for (uint256 i; i < last; ++i) {
+            if (_openAuctionIds[i] == requestId) {
+                _openAuctionIds[i] = _openAuctionIds[last];
+                break;
+            }
+        }
+        _openAuctionIds.pop();
+    }
+
+    /// @dev Anyone but the owner, or only approved keepers in private mode.
+    function _eligible() internal view returns (bool) {
+        return msg.sender != OWNER && (!privateMode || isKeeper[msg.sender]);
+    }
+
+    /// @dev Eligible callers only, at min(basefee + PRIORITY_CAP, tx.gasprice, gasCeiling), gas capped
+    ///      per function, plus `bounty`, never more than idle ETH (gas first, then bounty).
+    // SPEC: above the ceiling the caller is paid at the ceiling, so the part above it is not reimbursed.
     ///      Protective calls (sync, finalizeAuction) settle pulls already bought inside FWA's short
     ///      settlement window, so they ignore the owner's ceiling and stop at MAX_GAS_CEILING instead.
-    function _reimburse(uint256 gasStart, uint256 gasCap, bool protective) internal {
-        if (!isKeeper[msg.sender]) return;
+    function _reimburse(uint256 gasStart, uint256 gasCap, bool protective, uint256 bounty) internal {
+        if (!_eligible()) return;
         uint256 used = _min(gasStart - gasleft() + GAS_OVERHEAD, gasCap);
         uint256 price = _min(_min(block.basefee + PRIORITY_CAP, tx.gasprice), protective ? MAX_GAS_CEILING : gasCeiling);
-        uint256 amount = _min(used * price, idle);
-        if (amount == 0) return;
-        idle -= amount;
-        SafeTransferLib.forceSafeTransferETH(msg.sender, amount);
-        emit KeeperReimbursed(msg.sender, used, price, amount);
+        uint256 gasPay = _min(used * price, idle);
+        uint256 bountyPay = _min(bounty, idle - gasPay);
+        if (gasPay + bountyPay == 0) return;
+        idle -= gasPay + bountyPay;
+        SafeTransferLib.forceSafeTransferETH(msg.sender, gasPay + bountyPay);
+        if (gasPay != 0) emit KeeperReimbursed(msg.sender, used, price, gasPay);
+        if (bountyPay != 0) emit BountyPaid(msg.sender, bountyPay);
     }
 
     function _setKeepCollections(address[] calldata collections, bool keep) internal {
