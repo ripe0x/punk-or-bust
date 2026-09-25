@@ -165,6 +165,13 @@ Decisions:
   (`setSeries(factory, true)`), and FWA grants the reward vault distributor status. Until the
   grant lands, harvesting reverts; pulls are unaffected.
 
+## Live FWA values (mainnet, block 26,055,939)
+
+Read live by the contracts; recorded here because they shape operations. `settlementWindow` 1
+hour, `finalizeWindow` 1 hour, `settlementDiscountBps` 9,000, `builderRewardBps` 1,500,
+`maxOracleAge` 7 days, `minOracleChallengePeriod` 6 hours. With a 1 hour window a miss auction
+runs at most about 30 minutes, and keepers must sync within minutes of allocation.
+
 ## Deferred, not in v1
 
 - Punks auction adapter. In v1 a CryptoPunk follows the normal keep, auction, or sell-back rules.
