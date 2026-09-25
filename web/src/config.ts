@@ -5,6 +5,8 @@ const env = import.meta.env;
 
 export const chainId = Number(env.VITE_CHAIN_ID || 1);
 export const rpcUrl = env.VITE_RPC_URL || undefined;
+/** Optional. Without it the wallet modal lists only injected wallets. */
+export const walletConnectProjectId = env.VITE_WALLETCONNECT_PROJECT_ID?.trim() || undefined;
 
 const known = [mainnet, sepolia, foundry].find((c) => c.id === chainId);
 

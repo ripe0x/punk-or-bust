@@ -1,7 +1,7 @@
 # Static build of web/. Set the site's base directory to `web`.
 # Build env (Netlify UI, not this file): VITE_RPC_URL, VITE_FACTORY, VITE_FROM_BLOCK,
-# optional VITE_CHAIN_ID (default 1) and VITE_DEFAULT_KEEPER. VITE_RPC_URL ships in the public
-# bundle: use a key restricted to the site's domain. Routes are hash routes, so no SPA redirect.
+# optional VITE_CHAIN_ID (default 1), VITE_DEFAULT_KEEPER and VITE_WALLETCONNECT_PROJECT_ID.
+# VITE_RPC_URL ships in the public bundle: use a key restricted to the site's domain. Routes are hash routes, so no SPA redirect.
 
 [build]
   command = "npm ci && npm run build"
