@@ -58,6 +58,10 @@ library FwaClientLib {
 
     uint256 internal constant OWNER_OF_GAS = 35_000;
     uint256 internal constant RESTRICTION_PROBE_GAS = 30_000;
+    uint256 internal constant ORACLE_READ_GAS = 100_000;
+    /// @notice The pool's upper bound on a challenge period. The pool does not expose it, and the
+    ///         oracle marks a manual override with a period outside its valid range.
+    uint256 internal constant MAX_ORACLE_PERIOD = 24 hours;
 
     /// @notice FWA's own token-pack collections. Both settle as ETH.
     address internal constant LOCKED_FWA_TOKEN_PACKS = 0x470879Abd61FdCA91436fE27ed87dB2c8650f3e7;
@@ -361,6 +365,36 @@ library FwaClientLib {
     }
 
     /* ------------------------------------------------------------------ */
+    /*                            FLOOR ORACLE                             */
+    /* ------------------------------------------------------------------ */
+
+    /// @notice The floor oracle's bid for `collection` when the pool itself would accept the reading
+    ///         as a listing bound: not oracle-exempt, bid below ask, observed within `maxOracleAge`,
+    ///         and a challenge period of at least `minOracleChallengePeriod`. A period above the
+    ///         pool's own maximum marks a manual override and is not fresh.
+    /// @dev Every read is a bounded static call. A read that reverts, runs out of its gas, or
+    ///      answers short counts as no reading, so `fresh` is false and `bid` zero.
+    function freshFloorBid(address fwa, address collection) public view returns (bool fresh, uint256 bid) {
+        (bool ok, uint256[4] memory w) = _read(fwa, abi.encodeCall(IFWAV2.oracleExemptCollections, (collection)), 1);
+        if (!ok || w[0] != 0) return (false, 0);
+        (ok, w) = _read(fwa, abi.encodeCall(IFWAV2.floorOracle, ()), 1);
+        address oracle = address(uint160(w[0]));
+        if (!ok || w[0] >> 160 != 0 || oracle.code.length == 0) return (false, 0);
+        (ok, w) = _read(fwa, abi.encodeCall(IFWAV2.maxOracleAge, ()), 1);
+        if (!ok) return (false, 0);
+        uint256 maxAge = w[0];
+        (ok, w) = _read(fwa, abi.encodeCall(IFWAV2.minOracleChallengePeriod, ()), 1);
+        if (!ok) return (false, 0);
+        uint256 minPeriod = w[0];
+        (ok, w) = _read(oracle, abi.encodeWithSignature("getFloorRange(address)", collection), 4);
+        if (!ok) return (false, 0);
+        // w: bid, ask, observedAt, periodUsed.
+        if (w[0] == 0 || w[0] >= w[1] || w[2] == 0 || w[2] > block.timestamp) return (false, 0);
+        if (block.timestamp - w[2] > maxAge || w[3] < minPeriod || w[3] > MAX_ORACLE_PERIOD) return (false, 0);
+        return (true, w[0]);
+    }
+
+    /* ------------------------------------------------------------------ */
     /*                              INTERNAL                               */
     /* ------------------------------------------------------------------ */
 
@@ -374,6 +408,15 @@ library FwaClientLib {
         if (amount == 0) return;
         (bool ok, bytes memory data) = token.call(abi.encodeCall(IFWAToken.transfer, (custodian, amount)));
         if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TokenTransferFailed();
+    }
+
+    /// @dev Static call under `ORACLE_READ_GAS` that copies the first `n` (at most 4) return words.
+    function _read(address target, bytes memory data, uint256 n) private view returns (bool ok, uint256[4] memory out) {
+        assembly ("memory-safe") {
+            ok := staticcall(ORACLE_READ_GAS, target, add(data, 0x20), mload(data), 0, 0)
+            if lt(returndatasize(), mul(n, 0x20)) { ok := 0 }
+            if ok { returndatacopy(out, 0, mul(n, 0x20)) }
+        }
     }
 
     /// @dev `proven` is false when the collection reverts, exhausts the bounded gas, or answers with

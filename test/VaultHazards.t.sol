@@ -7,7 +7,7 @@ import {Vault} from "../src/Vault.sol";
 import {ControlledERC721, VaultTestBase} from "./harness/VaultTestBase.sol";
 
 /// @notice One test or more per hazard in docs/FWA-HAZARDS.md. Hazard 10 is in PurchaseRouter.t.sol;
-///         hazard 11 (floor oracle) only affects miss auctions, which M1 does not route to.
+///         hazard 11 (floor oracle) is in VaultAuction.t.sol.
 contract VaultHazardsTest is VaultTestBase {
     uint8 internal constant ACQ_EXPIRED = 3;
     uint8 internal constant ACQ_TIMED_OUT = 6;
@@ -222,6 +222,8 @@ contract VaultHazardsTest is VaultTestBase {
     /// @dev Hazard 12: the ETH bid uses the live settlement discount.
     function testLiveSettlementDiscount() public {
         pool.setUint(KEY_SETTLEMENT_DISCOUNT_BPS, 8000);
+        // Oracle bid at the new backstop, so the miss sells back rather than opening an auction.
+        oracle.setFloorRange(address(nft), 0.8 ether, 100 ether, uint48(block.timestamp), 12 hours);
         uint256 listingId = _list(depositor, 1, 1 ether);
         uint256 requestId = _requestOne();
         _allocate(requestId, listingId);
@@ -232,7 +234,7 @@ contract VaultHazardsTest is VaultTestBase {
 
     function testSettleSelfOnlySelf() public {
         vm.expectRevert(Vault.Unauthorized.selector);
-        vault.settleSelf(1, true);
+        vault.settleSelf(1, owner);
     }
 
     function testRouterRejectsNonVault() public {

@@ -23,6 +23,7 @@ interface IFwaV2Pool is IFWA, IFWAV2 {
     function setUint(uint256 key, uint256 value) external;
     function setBool(uint256 key, bool value) external;
     function setRewards(address module) external;
+    function setOracleExemptCollection(address collection, bool exempt) external;
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
 }
 
@@ -71,8 +72,8 @@ contract VrfServiceDouble {
     }
 }
 
-/// @notice Floor oracle double. Unset collections read bid 90 ETH, ask 100 ETH, observed now, over a
-///         7 day challenge.
+/// @notice Floor oracle double. Unset collections read bid 0.9 ETH, ask 100 ETH, observed now, over a
+///         12 hour challenge: fresh, and at the backstop of a 1 ETH listing, so misses sell back.
 contract FloorOracleDouble {
     struct Range {
         uint256 bid;
@@ -96,7 +97,7 @@ contract FloorOracleDouble {
         returns (uint256 bidPrice, uint256 askPrice, uint48 observedAt, uint48 periodUsed)
     {
         Range memory r = ranges[collection];
-        if (!r.set) return (90 ether, 100 ether, uint48(block.timestamp), 7 days);
+        if (!r.set) return (0.9 ether, 100 ether, uint48(block.timestamp), 12 hours);
         return (r.bid, r.ask, r.observedAt, r.periodUsed);
     }
 }

@@ -119,6 +119,11 @@ Where:
   `minOracleChallengePeriod()`. Manual oracle overrides are not treated as fresh.
 - No reading, stale reading, or oracle-exempt collection: auction only if `backing >= 1 ETH`,
   otherwise sell back.
+- A reading is also no reading when any oracle or pool read reverts or answers short, when
+  `bid == 0`, `bid >= ask`, or `observedAt` is zero or in the future (the pool's own checks), or when
+  `periodUsed` is above 24 hours (the pool's maximum challenge period, not readable on chain), which
+  is how a manual override is marked.
+- A keep that reverts sells back directly; it never opens an auction.
 
 The oracle only chooses between two routes that both keep the FWA backstop as the floor. It
 never sets a price the vault must accept.
@@ -132,6 +137,23 @@ never sets a price the vault must accept.
   cap. The cap is also bounded by the FWA settlement window minus a settle buffer.
 - A cap on concurrent open auctions per vault keeps recycling from stalling.
 - Bids are escrowed in the vault and refunded when outbid.
+
+Decisions:
+
+- An auction opens for 30 minutes. A bid with less than 5 minutes left moves the deadline to 5
+  minutes after it, never past the hard deadline: `min(open + 60 min, allocatedAt +
+  settlementWindow - 30 min)`. When less than 35 minutes of the window remain at reveal, the miss
+  sells back.
+- At most 8 open auctions per vault; at the cap a miss sells back.
+- Open auctions count as in flight: toward the 32 cap, at zero for the drawdown floor, and the run
+  does not end while one is open. The pull fee is charged when the auction opens.
+- Outbid refunds are pushed with a 100,000 gas stipend; a failed push is credited to the bidder,
+  who claims it with `claimBidRefund(to)`. Escrow and credits are never part of idle ETH, owner
+  withdrawal, or auto-return.
+- `finalizeAuction` is separate from `sync`, permissionless after the deadline, and reimburses
+  approved keepers. A winner is paid out as a sale (proceeds to idle, status `Sold`). If the listing
+  already left `Allocated`, the pull is `Forced` and the bid refunded. If the sell back itself
+  reverts, the whole finalize reverts and can be retried.
 
 ## Rewards
 
@@ -161,6 +183,9 @@ never sets a price the vault must accept.
 | Miss auction min surplus | 0.01 ETH |
 | Miss auction max duration | 3,600 s including extensions |
 | Miss auction extension | 300 s |
+| Miss auction base duration | 1,800 s |
+| Miss auction settle buffer | 1,800 s before the purchaser window ends |
+| Max open auctions per vault | 8 |
 | Opening premium / min increment | 10,500 bps / 10,500 bps |
 | No-oracle auction threshold | 1 ETH backing |
 | Max request batch | 5 (FWA's `maxAcquisitionsPerTx`) |
