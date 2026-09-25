@@ -86,6 +86,8 @@ run can never pull. Allowed, and the UI says so.
 - Keepers are reimbursed from the vault at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
   capped per call, never more than idle ETH. Only approved keepers are reimbursed, and a `sync`
   only when it resolves something.
+- Sync and auction finalizing protect pulls already bought, so their reimbursement ignores the
+  owner's ceiling: `min(basefee + 2 gwei, tx.gasprice, 100 gwei)`, same per-call gas caps.
 - A keeper cannot `requestPulls` when `tx.gasprice` is above the owner's ceiling (pull cost rises
   with gas). The owner can pull at any gas price.
 - A keeper's pull request first reserves its worst-case reimbursement, so keeper spending never

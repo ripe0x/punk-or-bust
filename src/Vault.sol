@@ -312,7 +312,7 @@ contract Vault is ReentrancyGuardTransient {
             }
         }
         _finishIfDone();
-        _reimburse(gasStart, REQUEST_GAS_CAP);
+        _reimburse(gasStart, REQUEST_GAS_CAP, false);
     }
 
     /// @notice Resolves up to `maxCount` outstanding pulls: routes every reveal (keep list to the
@@ -340,7 +340,7 @@ contract Vault is ReentrancyGuardTransient {
             if (block.timestamp > p.deadline || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)) _windDown();
         }
         _finishIfDone();
-        if (resolved != 0) _reimburse(gasStart, SYNC_GAS_CAP);
+        if (resolved != 0) _reimburse(gasStart, SYNC_GAS_CAP, true);
     }
 
     /// @notice Self-call boundary so a failed keep, delivery or sale reverts alone and routing can
@@ -410,7 +410,7 @@ contract Vault is ReentrancyGuardTransient {
         _absorb();
         _payFees();
         _finishIfDone();
-        _reimburse(gasStart, FINALIZE_GAS_CAP);
+        _reimburse(gasStart, FINALIZE_GAS_CAP, true);
     }
 
     /// @notice Sends the caller's credited bid refunds to `to`.
@@ -728,10 +728,12 @@ contract Vault is ReentrancyGuardTransient {
     /// @dev Approved keepers only, at min(basefee + PRIORITY_CAP, tx.gasprice, gasCeiling), gas capped
     ///      per function, never more than idle ETH.
     // SPEC: above the ceiling the keeper is paid at the ceiling, so the part above it is not reimbursed.
-    function _reimburse(uint256 gasStart, uint256 gasCap) internal {
+    ///      Protective calls (sync, finalizeAuction) settle pulls already bought inside FWA's short
+    ///      settlement window, so they ignore the owner's ceiling and stop at MAX_GAS_CEILING instead.
+    function _reimburse(uint256 gasStart, uint256 gasCap, bool protective) internal {
         if (!isKeeper[msg.sender]) return;
         uint256 used = _min(gasStart - gasleft() + GAS_OVERHEAD, gasCap);
-        uint256 price = _min(_min(block.basefee + PRIORITY_CAP, tx.gasprice), gasCeiling);
+        uint256 price = _min(_min(block.basefee + PRIORITY_CAP, tx.gasprice), protective ? MAX_GAS_CEILING : gasCeiling);
         uint256 amount = _min(used * price, idle);
         if (amount == 0) return;
         idle -= amount;

@@ -170,4 +170,33 @@ contract VaultKeeperTest is VaultTestBase {
         uint256 reserve = vault.REQUEST_GAS_CAP() * vault.gasCeiling();
         assertGe(vault.runValue() + reserve, vault.runFloor(), "keeper spend never crosses floor");
     }
+
+    /// @dev Keeper `sync`; returns the logged reimbursement price.
+    function _keeperSyncPrice() internal returns (uint256 price) {
+        vm.recordLogs();
+        vm.prank(keeper);
+        vault.sync(32);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(vault) && logs[i].topics[0] == REIMBURSED) {
+                (, price,) = abi.decode(logs[i].data, (uint256, uint256, uint256));
+            }
+        }
+    }
+
+    function testSyncReimbursedAboveOwnerCeiling() public {
+        vm.prank(owner);
+        vault.requestPulls(2);
+        uint256[] memory ids = vault.outstanding();
+        _allocate(ids[0], 1);
+
+        vm.fee(40 gwei);
+        vm.txGasPrice(45 gwei);
+        assertEq(_keeperSyncPrice(), 42 gwei, "basefee plus tip, owner ceiling ignored");
+
+        _allocate(ids[1], 2);
+        vm.fee(150 gwei);
+        vm.txGasPrice(160 gwei);
+        assertEq(_keeperSyncPrice(), 100 gwei, "hard cap");
+    }
 }
