@@ -54,7 +54,8 @@ States: `Idle`, `Running`, `WindingDown`.
 - `vault.startRun{value}(runParams)` from `Idle`. One run at a time.
 - `stop()` (owner): no new pulls; in-flight pulls and auctions resolve; then `Idle`.
 - A run ends on its own at: drawdown floor, keep target reached, deadline, pull cap, or FWA
-  config outside the run's bounds (a quote above `maxPullCostWei`). Then `WindingDown`, then `Idle`.
+  config outside the run's bounds (a quote above `maxPullCostWei`; only the owner's `requestPulls`
+  ends the run on it, anyone else's reverts `PriceAboveCap`). Then `WindingDown`, then `Idle`.
   `RunWindingDown` carries the reason: `Owner` (stop), `Floor`, `Deadline`, `Keeps`, `MaxPulls`,
   `PriceCap`.
 - Auto-return: when the last in-flight item of a run resolves, the vault sends its idle ETH to the
@@ -95,10 +96,13 @@ run's limits (floor, max pull cost, max pulls, deadline, outstanding cap).
   never paid.
 - A paid call is reimbursed from idle ETH at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
   capped per call, plus its bounty, never more than idle ETH (gas first, then bounty). It is paid
-  only when it does useful work: `requestPulls` opens a pull or ends the run (once per run; this
-  bounty is the only cost a 0% drawdown run can incur), `sync` resolves a pull or processes an
-  FWA acquisition, `finalizeAuction` finalizes. Payment comes before auto-return, so the call that
-  ends a run is paid.
+  only when it does useful work for this vault: `requestPulls` opens a pull or ends the run (once
+  per run; this bounty is the only cost a 0% drawdown run can incur), `sync` resolves one of this
+  vault's pulls or its FWA processing moves one of them to a terminal FWA status (processing other
+  purchasers' requests alone is not paid), `finalizeAuction` finalizes. The bounty, not the gas, is
+  paid only for a maximal call: `requestPulls` opens as many pulls as the vault allowed this call
+  (or ends the run), `sync` leaves no resolvable pull untried. Payment comes before auto-return, so
+  the call that ends a run is paid.
 - Sync and auction finalizing protect pulls already bought, so their reimbursement ignores the
   owner's ceiling: `min(basefee + 2 gwei, tx.gasprice, 100 gwei)`, same per-call gas caps.
 - Nobody but the owner can `requestPulls` when `tx.gasprice` is above the owner's ceiling (pull
@@ -113,8 +117,10 @@ run's limits (floor, max pull cost, max pulls, deadline, outstanding cap).
 
 - `requestPulls` and `finalizeAuction`: `bountyWei` (default 0.0003 ETH).
 - `sync`: `bountyWei` rising linearly to `syncBountyMaxWei` (default 0.003 ETH) as the oldest
-  allocated pull it resolves ages from 0 to 30 minutes since its FWA `allocatedAt`; the max after
-  that. A sync that resolves no allocated pull (refunds, or processing only) pays `bountyWei`.
+  allocated pull it resolves ages from 0 to 20 minutes since its FWA `allocatedAt` (so the max
+  arrives before the miss-auction cutoff); the max after that. A sync that resolves no allocated
+  pull (refunds, or processing only) pays `bountyWei`. Paid only for a maximal call (see
+  Permissions).
 - `setBounties(bountyWei, syncBountyMaxWei)` (owner, any time): each at or above its default,
   `syncBountyMaxWei >= bountyWei`, `bountyWei <= 0.003 ETH`, `syncBountyMaxWei <= 0.03 ETH`.
 
@@ -234,5 +240,5 @@ runs at most about 30 minutes, and keepers must sync within minutes of allocatio
 | Private mode default | off |
 | Default bounty (`bountyWei`) | 0.0003 ETH (owner may raise, max 0.003 ETH) |
 | Default sync bounty max (`syncBountyMaxWei`) | 0.003 ETH (owner may raise, max 0.03 ETH) |
-| Sync bounty ramp | 1,800 s after FWA `allocatedAt` |
+| Sync bounty ramp | 1,200 s after FWA `allocatedAt` |
 | Max FWA acquisitions processed per sync | 8 |

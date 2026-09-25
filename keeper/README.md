@@ -32,7 +32,7 @@ nothing is stored except an optional cursor file that saves the log rescan on re
 | `URGENT_PRIORITY_FEE_WEI` | `3 gwei` | Tip for urgent protective calls (`maxFee = 3 x basefee + tip`). |
 | `RBF_BLOCKS` / `RBF_BUMP_BPS` | `3` / `1500` | Replace-by-fee after 3 blocks, +15%. |
 | `CANCEL_AFTER_BLOCKS` | `20` | A `requestPulls` stuck at its vault's gas ceiling is cancelled after this many blocks. |
-| `SYNC_MAX_COUNT` | `10` | `sync(maxCount)` argument cap. |
+| `SYNC_MAX_COUNT` | `32` | `sync(maxCount)` argument cap. Keep at 32: the vault pays the bounty only when a sync clears every resolvable pull. |
 
 ## What a tick does
 

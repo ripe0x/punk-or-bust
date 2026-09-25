@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 import {Vm} from "forge-std/Vm.sol";
 
 import {IFWA} from "../src/interfaces/IFWA.sol";
+import {IFWAV2} from "../src/interfaces/IFWAV2.sol";
 import {Vault} from "../src/Vault.sol";
 import {VaultTestBase} from "./harness/VaultTestBase.sol";
 
@@ -13,17 +14,17 @@ contract VaultKeeperTest is VaultTestBase {
 
     function setUp() public override {
         super.setUp();
-        _createVault(5 ether, _params());
+        _createVault(20 ether, _params());
         _list(depositor, 1, 1 ether);
         _list(depositor, 2, 1 ether);
     }
 
-    /// @dev Keeper `requestPulls(1)`; returns the logged reimbursement and the keeper's balance gain.
+    /// @dev Keeper full batch `requestPulls(5)`; returns the logged reimbursement and the keeper's balance gain.
     function _keeperRequest() internal returns (uint256 gasUsed, uint256 price, uint256 amount, uint256 gained) {
         uint256 before = keeper.balance;
         vm.recordLogs();
         vm.prank(keeper);
-        vault.requestPulls(1);
+        vault.requestPulls(5);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(vault) && logs[i].topics[0] == REIMBURSED) {
@@ -38,7 +39,7 @@ contract VaultKeeperTest is VaultTestBase {
         vm.txGasPrice(1.2 gwei);
         vm.recordLogs();
         vm.prank(stranger);
-        assertEq(vault.requestPulls(1), 1, "anyone may request");
+        assertEq(vault.requestPulls(5), 5, "anyone may request");
         (uint256 gasPaid, uint256 bounty) = _paidFromLogs(stranger);
         assertGt(gasPaid, 0, "gas reimbursed");
         assertEq(bounty, vault.DEFAULT_BOUNTY(), "bounty");
@@ -58,7 +59,7 @@ contract VaultKeeperTest is VaultTestBase {
         vault.requestPulls(1);
 
         vm.prank(keeper);
-        assertEq(vault.requestPulls(1), 1, "keeper may request");
+        assertEq(vault.requestPulls(5), 5, "keeper may request");
         assertEq(keeper.balance, vault.bountyWei(), "keeper paid");
         vm.prank(owner);
         assertEq(vault.requestPulls(1), 1, "owner may request");
@@ -214,25 +215,25 @@ contract VaultKeeperTest is VaultTestBase {
         uint256 lo = vault.bountyWei();
         uint256 hi = vault.syncBountyMaxWei();
         assertEq(_syncBountyAt(10, 0), lo, "0 min: base bounty");
-        assertEq(_syncBountyAt(11, 15 minutes), lo + (hi - lo) / 2, "15 min: halfway");
-        assertEq(_syncBountyAt(12, 30 minutes), hi, "30 min: max");
-        assertEq(_syncBountyAt(13, 45 minutes), hi, "45 min: capped");
+        assertEq(_syncBountyAt(11, 10 minutes), lo + (hi - lo) / 2, "10 min: halfway");
+        assertEq(_syncBountyAt(12, 20 minutes), hi, "20 min: max");
+        assertEq(_syncBountyAt(13, 30 minutes), hi, "30 min: capped");
     }
 
     function testSyncBountyUsesOldestResolvedPull() public {
         uint256 a = _requestOne();
         _allocate(a, 1);
-        vm.warp(block.timestamp + 20 minutes);
+        vm.warp(block.timestamp + 10 minutes);
         uint256 b = _requestOne();
         _allocate(b, 2);
         (uint256 resolvable, uint256 oldest,) = vault.syncStatus();
         assertEq(resolvable, 2, "both resolvable");
-        assertEq(oldest, block.timestamp - 20 minutes, "oldest allocation");
+        assertEq(oldest, block.timestamp - 10 minutes, "oldest allocation");
         vm.warp(block.timestamp + 1 minutes);
         vm.prank(stranger);
         assertEq(vault.sync(32), 2, "both resolved");
         uint256 lo = vault.bountyWei();
-        assertEq(stranger.balance, lo + (vault.syncBountyMaxWei() - lo) * 21 / 30, "priced by the oldest");
+        assertEq(stranger.balance, lo + (vault.syncBountyMaxWei() - lo) * 11 / 20, "priced by the oldest");
     }
 
     function testSetBountiesBounds() public {
@@ -257,7 +258,7 @@ contract VaultKeeperTest is VaultTestBase {
         vm.stopPrank();
 
         vm.prank(stranger);
-        vault.requestPulls(1);
+        vault.requestPulls(5);
         assertEq(stranger.balance, 0.002 ether, "raised bounty applies");
     }
 
@@ -282,7 +283,8 @@ contract VaultKeeperTest is VaultTestBase {
     }
 
     /// @dev The callback only caches the word (fast path skipped), leaving the request `Ready`. A
-    ///      sync advances FWA's sequence itself and is paid for it.
+    ///      sync advances FWA's sequence itself and is paid gas for it; the bounty waits for the
+    ///      sync that resolves the pull.
     function testSyncProcessesReadyRequest() public {
         uint256 id = _requestOne();
         (uint256 resolvable,,) = vault.syncStatus();
@@ -294,11 +296,16 @@ contract VaultKeeperTest is VaultTestBase {
         assertEq(r, 1, "ready counts as resolvable");
         assertEq(oldest, 0, "nothing allocated yet");
 
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei);
+        vm.recordLogs();
         vm.prank(stranger);
         assertEq(vault.sync(0), 0, "processes without resolving");
         (,,,, st) = pool.acquisitions(id);
         assertEq(st, uint8(IFWA.AcquisitionStatus.Fulfilled), "processed by the vault");
-        assertEq(stranger.balance, vault.bountyWei(), "processing alone is paid");
+        (uint256 gasPaid, uint256 bounty) = _paidFromLogs(stranger);
+        assertGt(gasPaid, 0, "processing its own pull is paid gas");
+        assertEq(bounty, 0, "no bounty while a resolvable pull is left");
         (r, oldest,) = vault.syncStatus();
         assertEq(r, 1, "fulfilled is resolvable");
         assertEq(oldest, block.timestamp, "allocated now");
@@ -318,6 +325,92 @@ contract VaultKeeperTest is VaultTestBase {
         assertEq(vault.sync(32), 1, "unstuck and resolved");
         assertEq(uint8(_pullStatusOf(id)), uint8(Vault.PullStatus.Sold), "sold back");
         assertGt(stranger.balance, vault.bountyWei(), "paid");
+    }
+
+    /// @dev Other purchasers' acquisitions sit `Ready` ahead of the vault's `Pending` pull. A sync
+    ///      that only processes them is not useful work, so it is never paid from idle.
+    function testForeignProcessingIsNotPaid() public {
+        for (uint256 i = 3; i <= 12; ++i) {
+            _list(depositor, i, 1 ether);
+        }
+        address other = makeAddr("other");
+        (,, uint256 total) = pool.quoteAcquisitionPrice();
+        vm.deal(other, 100 ether);
+        vm.startPrank(other);
+        uint256[] memory a = IFWAV2(address(pool)).acquire{value: 5 * total}(other, 5, 0, 0, 0);
+        uint256[] memory b = IFWAV2(address(pool)).acquire{value: 3 * total}(other, 3, 0, 0, 0);
+        vm.stopPrank();
+        uint256 mine = _requestOne();
+        for (uint256 i; i < 5; ++i) {
+            coordinator.fulfill(a[i], uint256(keccak256(abi.encode(i))));
+        }
+        for (uint256 i; i < 3; ++i) {
+            coordinator.fulfill(b[i], uint256(keccak256(abi.encode(5 + i))));
+        }
+
+        uint256 idleBefore = vault.idle();
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei);
+        for (uint256 i; i < 8; ++i) {
+            vm.prank(stranger);
+            vault.sync(0);
+        }
+        (,,,, uint8 st) = pool.acquisitions(mine);
+        assertEq(st, uint8(IFWA.AcquisitionStatus.Pending), "vault pull untouched");
+        assertEq(stranger.balance, 0, "foreign processing never paid");
+        assertEq(vault.idle(), idleBefore, "idle unchanged");
+    }
+
+    function testSplitSyncPaysGasWithoutBounty() public {
+        vm.prank(owner);
+        vault.requestPulls(2);
+        uint256[] memory ids = vault.outstanding();
+        _allocate(ids[0], 1);
+        _allocate(ids[1], 2);
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei);
+
+        vm.recordLogs();
+        vm.prank(stranger);
+        assertEq(vault.sync(1), 1, "one of two");
+        (uint256 gasPaid, uint256 bounty) = _paidFromLogs(stranger);
+        assertGt(gasPaid, 0, "gas reimbursed");
+        assertEq(bounty, 0, "no bounty while a resolvable pull is left");
+
+        vm.recordLogs();
+        vm.prank(stranger);
+        assertEq(vault.sync(1), 1, "last one");
+        (gasPaid, bounty) = _paidFromLogs(stranger);
+        assertGt(gasPaid, 0, "gas reimbursed");
+        assertEq(bounty, vault.bountyWei(), "swept call earns the bounty");
+    }
+
+    function testSplitRequestPaysGasWithoutBounty() public {
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei);
+        vm.recordLogs();
+        vm.prank(stranger);
+        assertEq(vault.requestPulls(1), 1, "one of five allowed");
+        (uint256 gasPaid, uint256 bounty) = _paidFromLogs(stranger);
+        assertGt(gasPaid, 0, "gas reimbursed");
+        assertEq(bounty, 0, "split request earns no bounty");
+
+        // With four slots left under the outstanding cap, a request for 5 opens 4 and is maximal.
+        vm.deal(owner, 20 ether);
+        vm.startPrank(owner);
+        vault.deposit{value: 20 ether}();
+        for (uint256 i; i < 5; ++i) {
+            vault.requestPulls(5);
+        }
+        vault.requestPulls(2);
+        vm.stopPrank();
+        assertEq(vault.outstandingCount(), 28, "four slots left");
+        vm.recordLogs();
+        vm.prank(stranger);
+        assertEq(vault.requestPulls(5), 4, "capped by room");
+        (gasPaid, bounty) = _paidFromLogs(stranger);
+        assertGt(gasPaid, 0, "gas reimbursed");
+        assertEq(bounty, vault.bountyWei(), "maximal request earns the bounty");
     }
 
     function _pullStatusOf(uint256 id) internal view returns (Vault.PullStatus s) {
