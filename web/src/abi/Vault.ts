@@ -154,7 +154,33 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "DEFAULT_BOUNTY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DEFAULT_GAS_CEILING",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "DEFAULT_SYNC_BOUNTY_MAX",
     "inputs": [],
     "outputs": [
       {
@@ -258,6 +284,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_BOUNTY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_GAS_CEILING",
     "inputs": [],
     "outputs": [
@@ -272,6 +311,32 @@ export const vaultAbi = [
   {
     "type": "function",
     "name": "MAX_OUTSTANDING",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PROCESS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_SYNC_BOUNTY",
     "inputs": [],
     "outputs": [
       {
@@ -388,6 +453,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "SYNC_BOUNTY_RAMP",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "SYNC_GAS_CAP",
     "inputs": [],
     "outputs": [
@@ -414,6 +492,65 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "auctionInfo",
+    "inputs": [
+      {
+        "name": "requestId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "listingId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "backstop",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "highBid",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "highBidder",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "hardDeadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minNextBid",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "auctions",
     "inputs": [
       {
@@ -425,6 +562,16 @@ export const vaultAbi = [
     "outputs": [
       {
         "name": "listingId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "collection",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -516,6 +663,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "bountyWei",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claimBidRefund",
     "inputs": [
       {
@@ -579,6 +739,19 @@ export const vaultAbi = [
   {
     "type": "function",
     "name": "feeOwed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "feesPaid",
     "inputs": [],
     "outputs": [
       {
@@ -714,6 +887,16 @@ export const vaultAbi = [
             "internalType": "uint256"
           }
         ]
+      },
+      {
+        "name": "ceiling",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "autoReturn_",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -843,6 +1026,19 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "openAuctionIds",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "openAuctions",
     "inputs": [],
     "outputs": [
@@ -876,6 +1072,19 @@ export const vaultAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "privateMode",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -1083,6 +1292,24 @@ export const vaultAbi = [
   },
   {
     "type": "function",
+    "name": "setBounties",
+    "inputs": [
+      {
+        "name": "bounty",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "syncBountyMax",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setGasCeiling",
     "inputs": [
       {
@@ -1153,6 +1380,19 @@ export const vaultAbi = [
       },
       {
         "name": "approved",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setPrivateMode",
+    "inputs": [
+      {
+        "name": "enabled",
         "type": "bool",
         "internalType": "bool"
       }
@@ -1274,6 +1514,42 @@ export const vaultAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "syncBountyMaxWei",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "syncStatus",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "resolvable",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oldestAllocatedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "openAuctionsPastDeadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1453,6 +1729,44 @@ export const vaultAbi = [
   },
   {
     "type": "event",
+    "name": "BountiesSet",
+    "inputs": [
+      {
+        "name": "bountyWei",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "syncBountyMaxWei",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BountyPaid",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Deposited",
     "inputs": [
       {
@@ -1577,6 +1891,19 @@ export const vaultAbi = [
       },
       {
         "name": "approved",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PrivateModeSet",
+    "inputs": [
+      {
+        "name": "enabled",
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
@@ -1721,7 +2048,14 @@ export const vaultAbi = [
   {
     "type": "event",
     "name": "RunWindingDown",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "reason",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum Vault.WindDownReason"
+      }
+    ],
     "anonymous": false
   },
   {

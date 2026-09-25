@@ -153,6 +153,16 @@ export const factoryAbi = [
             "internalType": "uint256"
           }
         ]
+      },
+      {
+        "name": "gasCeiling",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "autoReturn",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [
