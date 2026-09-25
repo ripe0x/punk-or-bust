@@ -1,0 +1,21 @@
+{
+  "name": "punk-or-bust-keeper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keeper for punk-or-bust FWA V2 pull vaults",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/index.mjs",
+    "abi": "node scripts/abi.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "viem": "2.56.9"
+  }
+}
