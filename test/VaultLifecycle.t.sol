@@ -25,13 +25,53 @@ contract VaultLifecycleTest is VaultTestBase {
         vm.deal(owner, 1 ether);
         vm.prank(owner);
         vm.expectRevert(VaultFactory.VaultExists.selector);
-        factory.createVault{value: 1 ether}(new address[](0), new Vault.KeepToken[](0), new address[](0), _params());
+        factory.createVault{value: 1 ether}(
+            new address[](0), new Vault.KeepToken[](0), new address[](0), _params(), 1.2 gwei, true
+        );
+    }
+
+    function testCreateVaultAppliesSettings() public {
+        vm.deal(owner, 3 ether);
+        vm.startPrank(owner);
+        vm.expectRevert(Vault.BadParams.selector);
+        factory.createVault{value: 1 ether}(
+            new address[](0), new Vault.KeepToken[](0), new address[](0), _params(), 0, true
+        );
+        vm.expectRevert(Vault.BadParams.selector);
+        factory.createVault{value: 1 ether}(
+            new address[](0), new Vault.KeepToken[](0), new address[](0), _params(), 100 gwei + 1, true
+        );
+        vault = Vault(
+            payable(factory.createVault{value: 1 ether}(
+                    new address[](0), new Vault.KeepToken[](0), new address[](0), _params(), 5 gwei, false
+                ))
+        );
+        vm.stopPrank();
+        assertEq(vault.gasCeiling(), 5 gwei, "ceiling applied");
+        assertFalse(vault.autoReturn(), "auto-return applied");
+        assertEq(vault.bountyWei(), vault.DEFAULT_BOUNTY(), "default bounty");
+        assertFalse(vault.privateMode(), "public by default");
+    }
+
+    function testPriceCapEndsRun() public {
+        Vault.RunParams memory p = _params();
+        (, uint256 total) = _price();
+        p.maxPullCostWei = total - 1;
+        _createVault(3 ether, p);
+        _list(depositor, 1, 1 ether);
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.PriceCap);
+        vm.prank(keeper);
+        assertEq(vault.requestPulls(1), 0, "quote above the cap");
+        assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended");
     }
 
     function testInitializeOnlyFactory() public {
         _createVault(1 ether, _params());
         vm.expectRevert(Vault.Unauthorized.selector);
-        vault.initialize(stranger, new address[](0), new Vault.KeepToken[](0), new address[](0), _params());
+        vault.initialize(
+            stranger, new address[](0), new Vault.KeepToken[](0), new address[](0), _params(), 1.2 gwei, true
+        );
     }
 
     function testKeepHitGoesToOwnerWallet() public {
@@ -88,9 +128,13 @@ contract VaultLifecycleTest is VaultTestBase {
         assertEq(escrow, fee, "escrow is the price excluding VRF");
         assertEq(treasury.balance, 0, "no fee at request");
         _allocate(requestId, listingId);
-        vault.sync(32);
+        _ownerSync();
         assertEq(treasury.balance, escrow * FEE_PPM / 1_000_000, "250 ppm of price excluding VRF");
         assertEq(vault.feeOwed(), 0, "paid");
+        assertEq(vault.feesPaid(), treasury.balance, "running total");
+
+        _pullAndSync(2);
+        assertEq(vault.feesPaid(), 2 * escrow * FEE_PPM / 1_000_000, "accumulates");
     }
 
     function testRefundedPullPaysNoFee() public {
@@ -105,7 +149,7 @@ contract VaultLifecycleTest is VaultTestBase {
         (,,,, uint8 st) = pool.acquisitions(requestId);
         assertEq(st, 3, "expired");
 
-        vault.sync(32);
+        _ownerSync();
         (, Vault.PullStatus pullStatus) = vault.pulls(requestId);
         assertEq(uint8(pullStatus), uint8(Vault.PullStatus.Refunded), "refunded");
         assertEq(treasury.balance, 0, "no fee");
@@ -119,10 +163,13 @@ contract VaultLifecycleTest is VaultTestBase {
         _createVault(3 ether, p);
         _list(depositor, 1, 1 ether);
 
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.Floor);
         vm.prank(keeper);
         assertEq(vault.requestPulls(5), 0, "no pull");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run ended");
-        assertEq(owner.balance, 3 ether, "all returned");
+        assertEq(owner.balance, 3 ether - vault.bountyWei(), "all returned less the run-ending bounty");
+        assertEq(keeper.balance, vault.bountyWei(), "caller paid the bounty for ending the run");
     }
 
     function testFullDrawdownPullsUntilEmpty() public {
@@ -140,7 +187,7 @@ contract VaultLifecycleTest is VaultTestBase {
         vm.prank(keeper);
         assertEq(vault.requestPulls(1), 0, "no pull");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended");
-        assertEq(owner.balance, left, "remainder returned");
+        assertEq(owner.balance, left - vault.bountyWei(), "remainder returned less the run-ending bounty");
     }
 
     function testFloorClampsAndWaitsForInFlight() public {
@@ -159,7 +206,7 @@ contract VaultLifecycleTest is VaultTestBase {
 
         uint256[] memory ids = vault.outstanding();
         _allocate(ids[0], first);
-        vault.sync(32);
+        _ownerSync();
 
         // Each sold pull loses about 0.1 ETH; keep pulling until the floor ends the run.
         uint256 pulls = 1;
@@ -169,7 +216,7 @@ contract VaultLifecycleTest is VaultTestBase {
             if (vault.requestPulls(1) == 0) break;
             ids = vault.outstanding();
             _allocate(ids[0], listingId);
-            vault.sync(32);
+            _ownerSync();
             ++pulls;
         }
         assertGt(pulls, 1, "sale proceeds funded more pulls");
@@ -181,6 +228,8 @@ contract VaultLifecycleTest is VaultTestBase {
         _createVault(3 ether, _params());
         _list(depositor, 1, 1 ether);
         vm.warp(block.timestamp + 7 days + 1);
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.Deadline);
         vm.prank(keeper);
         assertEq(vault.requestPulls(1), 0, "no pull after deadline");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended");
@@ -192,7 +241,9 @@ contract VaultLifecycleTest is VaultTestBase {
         uint256 requestId = _requestOne();
         _allocate(requestId, listingId);
         vm.warp(block.timestamp + 7 days + 1);
-        vault.sync(32);
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.Deadline);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended by sync");
     }
 
@@ -205,6 +256,8 @@ contract VaultLifecycleTest is VaultTestBase {
 
         vm.prank(keeper);
         assertEq(vault.requestPulls(5), 2, "clamped to maxPulls");
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.MaxPulls);
         vm.prank(keeper);
         assertEq(vault.requestPulls(1), 0, "cap reached");
         assertEq(uint8(vault.status()), uint8(Vault.Status.WindingDown), "winding down with pulls in flight");
@@ -212,7 +265,7 @@ contract VaultLifecycleTest is VaultTestBase {
         uint256[] memory ids = vault.outstanding();
         _allocate(ids[0], first);
         _allocate(ids[1], second);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "idle once resolved");
         assertEq(address(vault).balance, 0, "returned");
     }
@@ -223,7 +276,11 @@ contract VaultLifecycleTest is VaultTestBase {
         _createVault(3 ether, p, _one(address(nft)));
         uint256 first = _list(depositor, 1, 1 ether);
         _list(depositor, 2, 1 ether);
-        _pullAndSync(first);
+        uint256 id = _requestOne();
+        _allocate(id, first);
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.Keeps);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "keep target reached");
         assertEq(nft.ownerOf(1), owner, "kept");
     }
@@ -232,6 +289,8 @@ contract VaultLifecycleTest is VaultTestBase {
         _createVault(3 ether, _params());
         vm.prank(owner);
         vault.setAutoReturn(false);
+        vm.expectEmit(address(vault));
+        emit Vault.RunWindingDown(Vault.WindDownReason.Owner);
         vm.prank(owner);
         vault.stop();
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "idle");
@@ -299,7 +358,9 @@ contract VaultLifecycleTest is VaultTestBase {
         vm.deal(owner, 1 ether);
         vm.prank(owner);
         vm.expectRevert(Vault.BadParams.selector);
-        factory.createVault{value: 1 ether}(new address[](0), new Vault.KeepToken[](0), new address[](0), p);
+        factory.createVault{value: 1 ether}(
+            new address[](0), new Vault.KeepToken[](0), new address[](0), p, 1.2 gwei, true
+        );
     }
 
     /// @dev The floor admits a pull exactly when value minus its cost stays at or above it.
@@ -324,7 +385,9 @@ contract VaultLifecycleTest is VaultTestBase {
 
         (uint256 fee, uint256 total) = _price();
         uint256 unit = total + fee * FEE_PPM / 1_000_000;
-        uint256 expected = start > floor ? (start - floor) / unit : 0;
+        // A paid caller reserves its worst-case gas and bounty above the floor.
+        uint256 reserved = floor + vault.REQUEST_GAS_CAP() * vault.gasCeiling() + vault.bountyWei();
+        uint256 expected = start > reserved ? (start - reserved) / unit : 0;
         if (start / total < expected) expected = start / total;
         if (expected > 5) expected = 5;
 
@@ -333,7 +396,8 @@ contract VaultLifecycleTest is VaultTestBase {
         assertEq(requested, expected, "pulls admitted");
         if (requested != 0) {
             assertGe(vault.runValue(), floor, "value stays at or above floor");
-            assertEq(vault.idle(), start - requested * total, "idle debited by exact cost");
+            assertEq(vault.idle(), start - requested * total - vault.bountyWei(), "idle debited by exact cost");
+            assertEq(keeper.balance, vault.bountyWei(), "bounty paid");
         } else {
             assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run ended");
         }

@@ -48,13 +48,15 @@ External, already deployed:
 
 States: `Idle`, `Running`, `WindingDown`.
 
-- `factory.createVault{value}(keepList, keepers, runParams)` (paid by the user): clone, register
-  with the reward vault, lock the owner's 100% FWAT share, store the keep list and keepers, start
-  the first run.
+- `factory.createVault{value}(keepList, keepers, runParams, gasCeiling, autoReturn)` (paid by the
+  user): clone, register with the reward vault, lock the owner's 100% FWAT share, store the keep
+  list, keepers, gas ceiling (validated as in `setGasCeiling`) and auto-return, start the first run.
 - `vault.startRun{value}(runParams)` from `Idle`. One run at a time.
 - `stop()` (owner): no new pulls; in-flight pulls and auctions resolve; then `Idle`.
 - A run ends on its own at: drawdown floor, keep target reached, deadline, pull cap, or FWA
   config outside the run's bounds (a quote above `maxPullCostWei`). Then `WindingDown`, then `Idle`.
+  `RunWindingDown` carries the reason: `Owner` (stop), `Floor`, `Deadline`, `Keeps`, `MaxPulls`,
+  `PriceCap`.
 - Auto-return: when the last in-flight item of a run resolves, the vault sends its idle ETH to the
   owner. Default on, owner-settable.
 - `withdraw()` (owner) any time the vault is `Idle`.
@@ -73,25 +75,55 @@ run can never pull. Allowed, and the UI says so.
 
 - Keep list: whole collections and specific `(collection, tokenId)` pairs. Only affects reveals
   after the change.
-- Gas price ceiling for keeper reimbursement. Default **1.2 gwei**. Must be above zero and at most
-  100 gwei.
+- Gas price ceiling for paid callers (pull requests and their reimbursement). Default
+  **1.2 gwei**. Must be above zero and at most 100 gwei.
 - Approved keepers.
+- Private mode (default off).
+- Bounties (see Bounties).
 - Auto-return on or off.
 
 ## Permissions
 
-- Spending ETH on pulls (`requestPulls`): owner or an approved keeper.
+Public by default: anyone may call `requestPulls`, `sync` and `finalizeAuction`, always inside the
+run's limits (floor, max pull cost, max pulls, deadline, outstanding cap).
+
+- `privateMode` (owner setting, default off): only the owner and approved keepers may
+  `requestPulls`, and only approved keepers are paid. `sync` and `finalizeAuction` stay open.
 - Everything that only brings value back (sync reveals, settle, finalize auctions, recover forced
   or stuck outcomes, claim refunds, harvest rewards): anyone.
-- Keepers are reimbursed from the vault at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
-  capped per call, never more than idle ETH. Only approved keepers are reimbursed, and a `sync`
-  only when it resolves something.
+- Paid callers: anyone but the owner in public mode, approved keepers in private mode. The owner is
+  never paid.
+- A paid call is reimbursed from idle ETH at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
+  capped per call, plus its bounty, never more than idle ETH (gas first, then bounty). It is paid
+  only when it does useful work: `requestPulls` opens a pull or ends the run (once per run; this
+  bounty is the only cost a 0% drawdown run can incur), `sync` resolves a pull or processes an
+  FWA acquisition, `finalizeAuction` finalizes. Payment comes before auto-return, so the call that
+  ends a run is paid.
 - Sync and auction finalizing protect pulls already bought, so their reimbursement ignores the
   owner's ceiling: `min(basefee + 2 gwei, tx.gasprice, 100 gwei)`, same per-call gas caps.
-- A keeper cannot `requestPulls` when `tx.gasprice` is above the owner's ceiling (pull cost rises
-  with gas). The owner can pull at any gas price.
-- A keeper's pull request first reserves its worst-case reimbursement, so keeper spending never
-  crosses the drawdown floor.
+- Nobody but the owner can `requestPulls` when `tx.gasprice` is above the owner's ceiling (pull
+  cost rises with gas). The owner can pull at any gas price.
+- A paid pull request first reserves its worst-case reimbursement plus `bountyWei`, so paid
+  spending never crosses the drawdown floor.
+- Liveness: before resolving, `sync` calls FWA `processAcquisitions(min(outstanding, 8))` when an
+  outstanding pull is not yet terminal in FWA (for example `Ready` after a skipped callback fast
+  path, or `TimedOut`). A revert there is ignored.
+
+### Bounties
+
+- `requestPulls` and `finalizeAuction`: `bountyWei` (default 0.0003 ETH).
+- `sync`: `bountyWei` rising linearly to `syncBountyMaxWei` (default 0.003 ETH) as the oldest
+  allocated pull it resolves ages from 0 to 30 minutes since its FWA `allocatedAt`; the max after
+  that. A sync that resolves no allocated pull (refunds, or processing only) pays `bountyWei`.
+- `setBounties(bountyWei, syncBountyMaxWei)` (owner, any time): each at or above its default,
+  `syncBountyMaxWei >= bountyWei`, `bountyWei <= 0.003 ETH`, `syncBountyMaxWei <= 0.03 ETH`.
+
+### Views for callers
+
+`openAuctionIds()`, `auctionInfo(requestId)` (record plus the minimum next bid), and `syncStatus()`:
+outstanding pulls FWA no longer holds as `Pending`, the oldest `allocatedAt` among outstanding pulls
+still allocated (zero if none), and open auctions past their deadline. `feesPaid` is the running
+total of pull fees paid.
 
 ## Drawdown floor
 
@@ -152,10 +184,10 @@ Decisions:
 - Outbid refunds are pushed with a 100,000 gas stipend; a failed push is credited to the bidder,
   who claims it with `claimBidRefund(to)`. Escrow and credits are never part of idle ETH, owner
   withdrawal, or auto-return.
-- `finalizeAuction` is separate from `sync`, permissionless after the deadline, and reimburses
-  approved keepers. A winner is paid out as a sale (proceeds to idle, status `Sold`). If the listing
-  already left `Allocated`, the pull is `Forced` and the bid refunded. If the sell back itself
-  reverts, the whole finalize reverts and can be retried.
+- `finalizeAuction` is separate from `sync`, permissionless after the deadline, and pays a paid
+  caller (see Permissions). A winner is paid out as a sale (proceeds to idle, status `Sold`). If the
+  listing already left `Allocated`, the pull is `Forced` and the bid refunded. If the sell back
+  itself reverts, the whole finalize reverts and can be retried.
 
 ## Rewards
 
@@ -199,3 +231,8 @@ runs at most about 30 minutes, and keepers must sync within minutes of allocatio
 | No-oracle auction threshold | 1 ETH backing |
 | Max request batch | 5 (FWA's `maxAcquisitionsPerTx`) |
 | Max outstanding pulls | 32 |
+| Private mode default | off |
+| Default bounty (`bountyWei`) | 0.0003 ETH (owner may raise, max 0.003 ETH) |
+| Default sync bounty max (`syncBountyMaxWei`) | 0.003 ETH (owner may raise, max 0.03 ETH) |
+| Sync bounty ramp | 1,800 s after FWA `allocatedAt` |
+| Max FWA acquisitions processed per sync | 8 |

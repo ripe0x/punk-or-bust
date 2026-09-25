@@ -94,7 +94,9 @@ abstract contract VaultTestBase is FwaV2Harness {
         vm.deal(owner, owner.balance + value);
         vm.prank(owner);
         created = Vault(
-            payable(factory.createVault{value: value}(keepCollections, new Vault.KeepToken[](0), keepers, params))
+            payable(factory.createVault{value: value}(
+                    keepCollections, new Vault.KeepToken[](0), keepers, params, 1.2 gwei, true
+                ))
         );
         vault = created;
     }
@@ -120,7 +122,13 @@ abstract contract VaultTestBase is FwaV2Harness {
     function _pullAndSync(uint256 listingId) internal returns (uint256 requestId) {
         requestId = _requestOne();
         _allocate(requestId, listingId);
-        vault.sync(32);
+        _ownerSync();
+    }
+
+    /// @notice Syncs as the owner, who is never paid, so accounting assertions stay exact.
+    function _ownerSync() internal returns (uint256) {
+        vm.prank(owner);
+        return vault.sync(32);
     }
 
     /// @notice Lists `tokenId` of a custom collection.

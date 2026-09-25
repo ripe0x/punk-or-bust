@@ -88,7 +88,8 @@ contract VaultAuctionTest is VaultTestBase {
     }
 
     function _auction(uint256 requestId) internal view returns (Vault.Auction memory a) {
-        (a.listingId, a.backstop, a.highBid, a.highBidder, a.deadline, a.hardDeadline) = vault.auctions(requestId);
+        (a.listingId, a.collection, a.tokenId, a.backstop, a.highBid, a.highBidder, a.deadline, a.hardDeadline) =
+            vault.auctions(requestId);
     }
 
     function _bid(address bidder, uint256 requestId, uint256 amount) internal {
@@ -298,7 +299,7 @@ contract VaultAuctionTest is VaultTestBase {
 
         vm.warp(windowEnd - 30 minutes - 40 minutes);
         _setBid(address(nft), 2 ether);
-        vault.sync(32);
+        _ownerSync();
         Vault.Auction memory a = _auction(id);
         assertEq(a.hardDeadline, windowEnd - vault.AUCTION_SETTLE_BUFFER(), "window bounds the cap");
         assertEq(a.deadline, block.timestamp + 30 minutes, "base duration fits");
@@ -327,7 +328,7 @@ contract VaultAuctionTest is VaultTestBase {
         (,,,,,,,,, uint64 allocatedAt,) = pool.listings(listingId);
         vm.warp(uint256(allocatedAt) + pool.settlementWindow() - 30 minutes - 5 minutes + 1);
         _setBid(address(nft), 2 ether);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(_status(id)), uint8(Vault.PullStatus.Sold), "too little window left");
     }
 
@@ -391,7 +392,8 @@ contract VaultAuctionTest is VaultTestBase {
         vault.finalizeAuction(id);
         assertEq(nft.ownerOf(1), alice, "winner holds the NFT");
         assertEq(uint8(_status(id)), uint8(Vault.PullStatus.Sold), "sold");
-        assertEq(vault.idle(), idleBefore + 1.2 ether, "bid is proceeds");
+        assertEq(stranger.balance, vault.bountyWei(), "public caller paid the bounty");
+        assertEq(vault.idle(), idleBefore + 1.2 ether - vault.bountyWei(), "bid is proceeds");
         assertEq(vault.bidEscrow(), 0, "escrow released");
         assertEq(vault.openAuctions(), 0, "closed");
         _assertLedger();
@@ -404,6 +406,7 @@ contract VaultAuctionTest is VaultTestBase {
         uint256 id = _openAuction(1);
         uint256 idleBefore = vault.idle();
         vm.warp(_auction(id).deadline);
+        vm.prank(owner);
         vault.finalizeAuction(id);
         assertEq(nft.ownerOf(1), depositor, "sold back");
         assertEq(uint8(_status(id)), uint8(Vault.PullStatus.Sold), "sold");
@@ -422,6 +425,7 @@ contract VaultAuctionTest is VaultTestBase {
         blocked.setBlocked(alice, true);
         uint256 idleBefore = vault.idle();
         vm.warp(_auction(id).deadline);
+        vm.prank(owner);
         vault.finalizeAuction(id);
 
         assertEq(blocked.ownerOf(1), depositor, "sold back");
@@ -452,6 +456,7 @@ contract VaultAuctionTest is VaultTestBase {
         vm.warp(a.deadline);
         vm.expectEmit(address(vault));
         emit Vault.PullForced(id, a.listingId, FwaClientLib.ForcedKind.ForcedEth);
+        vm.prank(owner);
         vault.finalizeAuction(id);
         assertEq(uint8(_status(id)), uint8(Vault.PullStatus.Forced), "forced");
         assertEq(vault.bidRefunds(address(hostile)), 1 ether, "hostile bidder credited");
@@ -491,7 +496,7 @@ contract VaultAuctionTest is VaultTestBase {
 
         // A stop condition with an auction in flight winds down but does not end the run.
         vm.warp(block.timestamp + 7 days + 1);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(vault.status()), uint8(Vault.Status.WindingDown), "auction keeps the run open");
     }
 
@@ -500,6 +505,7 @@ contract VaultAuctionTest is VaultTestBase {
         vm.warp(_auction(id).deadline);
         vm.fee(1 gwei);
         vm.txGasPrice(1 gwei);
+        uint256 before = keeper.balance;
         vm.recordLogs();
         vm.prank(keeper);
         vault.finalizeAuction(id);
@@ -511,18 +517,83 @@ contract VaultAuctionTest is VaultTestBase {
             }
         }
         assertGt(amount, 0, "reimbursed");
-        assertEq(keeper.balance, amount, "paid");
+        assertEq(keeper.balance - before, amount + vault.bountyWei(), "gas plus bounty");
         assertLe(amount, vault.FINALIZE_GAS_CAP() * 1 gwei, "bounded");
     }
 
-    function testStrangerNotReimbursedForFinalize() public {
+    function testStrangerNotPaidForFinalizeInPrivateMode() public {
+        vm.prank(owner);
+        vault.setPrivateMode(true);
         uint256 id = _openAuction(1);
         vm.warp(_auction(id).deadline);
         vm.fee(1 gwei);
         vm.txGasPrice(1 gwei);
         vm.prank(stranger);
         vault.finalizeAuction(id);
-        assertEq(stranger.balance, 0, "not reimbursed");
+        assertEq(stranger.balance, 0, "not paid");
+    }
+
+    function testOpenAuctionIdsAndSyncStatus() public {
+        uint256 a = _openAuction(1);
+        vm.warp(block.timestamp + 1 minutes);
+        uint256 b = _openAuction(2);
+        vm.warp(block.timestamp + 1 minutes);
+        uint256 c = _openAuction(3);
+        uint256[] memory ids = vault.openAuctionIds();
+        assertEq(ids.length, 3, "three open");
+        assertEq(ids[0], a, "first");
+        assertEq(ids[2], c, "third");
+
+        _bid(alice, b, 1 ether);
+        (
+            uint256 listingId,
+            address collection,
+            uint256 tokenId,
+            uint256 backstop,
+            uint256 highBid,
+            address highBidder,
+            uint256 deadline,
+            uint256 hardDeadline,
+            uint256 minNextBid
+        ) = vault.auctionInfo(b);
+        assertEq(listingId, _auction(b).listingId, "listing");
+        assertEq(collection, address(nft), "collection");
+        assertEq(tokenId, 2, "token");
+        assertEq(backstop, 0.9 ether, "backstop");
+        assertEq(highBid, 1 ether, "high bid");
+        assertEq(highBidder, alice, "high bidder");
+        assertEq(deadline, _auction(b).deadline, "deadline");
+        assertEq(hardDeadline, _auction(b).hardDeadline, "hard deadline");
+        assertEq(minNextBid, 1.05 ether, "high bid plus 5%");
+        (,,,,,,,, minNextBid) = vault.auctionInfo(c);
+        assertEq(minNextBid, 0.945 ether, "backstop plus 5%");
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(Vault.BidTooLow.selector);
+        vault.bid{value: minNextBid - 1}(c);
+        _bid(bob, c, minNextBid);
+        (,, uint256 past) = vault.syncStatus();
+        assertEq(past, 0, "none past deadline");
+
+        vm.warp(_auction(a).deadline);
+        (,, past) = vault.syncStatus();
+        assertEq(past, 1, "first past deadline");
+        vm.prank(owner);
+        vault.finalizeAuction(a);
+        ids = vault.openAuctionIds();
+        assertEq(ids.length, 2, "swap and pop");
+        assertEq(ids[0], c, "last moved into the gap");
+        assertEq(ids[1], b, "second kept");
+        assertEq(vault.openAuctions(), 2, "count matches");
+
+        vm.warp(_auction(c).deadline);
+        (,, past) = vault.syncStatus();
+        assertEq(past, 2, "both past deadline");
+        vm.prank(owner);
+        vault.finalizeAuction(c);
+        ids = vault.openAuctionIds();
+        assertEq(ids.length, 1, "one left");
+        assertEq(ids[0], b, "remaining");
     }
 
     /// @dev Escrowed bids and credited refunds never join idle, whatever else lands on the vault, and

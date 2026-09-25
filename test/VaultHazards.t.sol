@@ -38,7 +38,7 @@ contract VaultHazardsTest is VaultTestBase {
 
         vm.expectEmit(address(vault));
         emit Vault.PullForced(requestId, listingId, FwaClientLib.ForcedKind.ForcedEth);
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(_pullStatus(requestId)), uint8(Vault.PullStatus.Forced), "forced");
         assertEq(vault.idle() + treasury.balance, idleBefore + bid, "credited to idle, less the pull fee");
     }
@@ -56,7 +56,7 @@ contract VaultHazardsTest is VaultTestBase {
 
         vm.expectEmit(address(vault));
         emit Vault.PullForced(requestId, listingId, FwaClientLib.ForcedKind.ForcedNft);
-        vault.sync(32);
+        _ownerSync();
 
         vm.prank(stranger);
         vm.expectRevert(Vault.Unauthorized.selector);
@@ -77,7 +77,7 @@ contract VaultHazardsTest is VaultTestBase {
         pool.finalizeUnsettled(listingId);
         assertEq(nft.ownerOf(1), address(vault), "NFT arrived unasked");
 
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(_pullStatus(requestId)), uint8(Vault.PullStatus.Forced), "forced");
         vm.prank(owner);
         vault.sweepNft(address(nft), 1);
@@ -111,7 +111,7 @@ contract VaultHazardsTest is VaultTestBase {
         assertEq(vault.withdrawAcquisitionRefund(), 2 * escrow, "withdrawn");
         assertEq(vault.idle(), idleBefore + 2 * escrow, "idle credited");
 
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(_pullStatus(first)), uint8(Vault.PullStatus.Refunded), "first refunded");
         assertEq(uint8(_pullStatus(second)), uint8(Vault.PullStatus.Refunded), "second refunded");
         assertEq(treasury.balance, 0, "no fee");
@@ -131,7 +131,7 @@ contract VaultHazardsTest is VaultTestBase {
 
         vm.expectEmit(address(vault));
         emit Vault.PullForced(requestId, listingId, FwaClientLib.ForcedKind.StuckNft);
-        vault.sync(32);
+        _ownerSync();
 
         vm.expectRevert();
         vault.recoverStuck(listingId);
@@ -157,7 +157,7 @@ contract VaultHazardsTest is VaultTestBase {
         uint256 requestId = _requestOne();
         uint256 total = idleBefore - vault.idle();
         _allocate(requestId, listingId);
-        vault.sync(32);
+        _ownerSync();
 
         assertEq(uint8(_pullStatus(requestId)), uint8(Vault.PullStatus.Sold), "sold back");
         assertEq(restricted.ownerOf(1), depositor, "NFT to depositor");
@@ -176,12 +176,9 @@ contract VaultHazardsTest is VaultTestBase {
         (,,,, uint8 st) = pool.acquisitions(requestId);
         assertEq(st, ACQ_TIMED_OUT, "timed out");
 
-        vault.sync(32);
-        assertEq(uint8(_pullStatus(requestId)), uint8(Vault.PullStatus.Pending), "still in flight");
-
-        pool.processAcquisitions(1);
+        // The vault's own sync advances FWA's sequence past the timed-out head, then takes the refund.
         uint256 idleBefore = vault.idle();
-        vault.sync(32);
+        _ownerSync();
         assertEq(uint8(_pullStatus(requestId)), uint8(Vault.PullStatus.Refunded), "refunded");
         assertEq(vault.idle(), idleBefore + escrow, "escrow back");
     }
@@ -228,7 +225,7 @@ contract VaultHazardsTest is VaultTestBase {
         uint256 requestId = _requestOne();
         _allocate(requestId, listingId);
         uint256 before = address(vault).balance;
-        vault.sync(32);
+        _ownerSync();
         assertEq(address(vault).balance + treasury.balance - before, 0.8 ether, "80% bid");
     }
 

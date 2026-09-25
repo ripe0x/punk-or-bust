@@ -58,8 +58,11 @@ contract ForkVaultRunTest is ForkBase {
         uint256 ownerBefore = owner.balance;
         uint256 feeBefore = FEE_RECIPIENT.balance;
 
+        uint256 callerBefore = stranger.balance;
         vm.prank(stranger);
         assertEq(vault.sync(32), 2, "both resolved");
+        uint256 callerPaid = stranger.balance - callerBefore;
+        assertGe(callerPaid, vault.bountyWei(), "public caller paid at least the bounty");
 
         (, Vault.PullStatus keepOutcome) = vault.pulls(ids[0]);
         (, Vault.PullStatus missOutcome) = vault.pulls(ids[1]);
@@ -70,7 +73,9 @@ contract ForkVaultRunTest is ForkBase {
 
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run finished on the keep target");
         assertEq(address(vault).balance, 0, "vault emptied");
-        assertEq(owner.balance - ownerBefore, vaultBefore + backstop - fees, "auto-return includes the sale");
+        assertEq(
+            owner.balance - ownerBefore, vaultBefore + backstop - fees - callerPaid, "auto-return includes the sale"
+        );
         console2.log("pull fees", fees);
         console2.log("returned", owner.balance - ownerBefore);
     }

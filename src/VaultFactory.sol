@@ -43,21 +43,26 @@ contract VaultFactory is ReentrancyGuardTransient {
         IMPLEMENTATION = address(new Vault(fwa, address(this), router, rewardVault, feeRecipient));
     }
 
-    /// @notice Creates the caller's vault, funds it with `msg.value`, starts its first run, and tries to
+    /// @notice Creates the caller's vault, funds it with `msg.value`, applies its gas ceiling and
+    ///         auto-return setting, starts its first run, and tries to
     ///         register it with the reward vault. Registration fails softly until the reward vault
     ///         allowlists this factory; `Vault.registerRewards` retries it later.
     function createVault(
         address[] calldata keepCollections,
         Vault.KeepToken[] calldata keepTokens,
         address[] calldata keepers,
-        Vault.RunParams calldata params
+        Vault.RunParams calldata params,
+        uint256 gasCeiling,
+        bool autoReturn
     ) external payable nonReentrant returns (address vault) {
         if (vaultOf[msg.sender] != address(0)) revert VaultExists();
         vault = LibClone.cloneDeterministic(IMPLEMENTATION, _salt(msg.sender));
         vaultOf[msg.sender] = vault;
         isVault[vault] = true;
         emit VaultCreated(msg.sender, vault);
-        Vault(payable(vault)).initialize{value: msg.value}(msg.sender, keepCollections, keepTokens, keepers, params);
+        Vault(payable(vault)).initialize{value: msg.value}(
+            msg.sender, keepCollections, keepTokens, keepers, params, gasCeiling, autoReturn
+        );
         try Vault(payable(vault)).registerRewards() {}
         catch {
             emit RewardsRegistrationSkipped(vault);
