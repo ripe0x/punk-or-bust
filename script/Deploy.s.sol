@@ -7,6 +7,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 import {PurchaseRouter} from "../src/PurchaseRouter.sol";
 import {Vault} from "../src/Vault.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
+import {FwaClientLib} from "../src/fwa/FwaClientLib.sol";
 import {MaskedCode} from "./MaskedCode.sol";
 
 interface IDeployPool {
@@ -36,14 +37,19 @@ interface IDeployRewardVault {
 }
 
 /// @notice Mainnet deployment of `VaultFactory`, which deploys the router and the vault
-///         implementation from its constructor.
+///         implementation from its constructor. `FwaClientLib` is an external library: forge
+///         deploys it first through the CREATE2 deployer (a deterministic address) unless it already
+///         has code, and links it.
 ///
 ///   run()          preflight, deploy, postflight, record. Chain 1 only.
 ///   smoke(factory) creates the sender's vault from `factory`, reads it back, then stops it and
 ///                  withdraws. Used by the dry run on a fork; never part of the mainnet deploy.
 ///
 /// Env: FWA, REWARD_VAULT, FEE_RECIPIENT, TRANSFER_HELPER (default: SPEC mainnet values),
-/// DEPLOY_COMMIT (recorded), DRY_RUN (1: never write the record file).
+/// DEPLOY_COMMIT (recorded), DEPLOY_RECORD (where a broadcast writes the record; default
+/// deployments/pending.json). deploy.sh promotes the pending record to deployments/mainnet.json
+/// with the tx hashes and block once every transaction has a receipt, so a failed broadcast never
+/// leaves a mainnet record behind.
 contract Deploy is Script {
     address internal constant MAINNET_FWA = 0x958C41181182e76F221331b2755b77D9e1426A98;
     address internal constant MAINNET_REWARD_VAULT = 0xEa20a110ad3Dfc483977d14f80203994E65D34FB;
@@ -59,7 +65,7 @@ contract Deploy is Script {
     address internal constant PURCHASE_NOTIFIER = 0x612dF3a344990F8E53499ec1bC79Be63cFa496D0;
 
     string internal constant POOL_REF = "refs/fwa-v2/FWAV2.json";
-    string internal constant RECORD_PATH = "deployments/mainnet.json";
+    string internal constant PENDING_RECORD = "deployments/pending.json";
 
     struct Config {
         address fwa;
@@ -190,6 +196,7 @@ contract Deploy is Script {
         require(address(router) == vm.computeCreateAddress(f, 1), "router address");
         require(address(impl) == vm.computeCreateAddress(f, 2), "implementation address");
         require(f.code.length != 0 && address(router).code.length != 0 && address(impl).code.length != 0, "code");
+        require(address(FwaClientLib).code.length != 0, "linked library has no code");
 
         require(factory.FWA() == c.fwa, "factory FWA");
         require(factory.REWARD_VAULT() == c.rewardVault, "factory REWARD_VAULT");
@@ -213,6 +220,7 @@ contract Deploy is Script {
         console2.log("factory", f);
         console2.log("router", address(router));
         console2.log("vault implementation", address(impl));
+        console2.log("linked FwaClientLib", address(FwaClientLib));
         console2.log("series allowed", IDeployRewardVault(c.rewardVault).seriesAllowed(f));
     }
 
@@ -224,18 +232,18 @@ contract Deploy is Script {
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "router", factory.ROUTER());
         vm.serializeAddress(k, "vaultImplementation", factory.IMPLEMENTATION());
+        vm.serializeAddress(k, "fwaClientLib", address(FwaClientLib));
         vm.serializeAddress(k, "fwa", c.fwa);
         vm.serializeAddress(k, "rewardVault", c.rewardVault);
         vm.serializeAddress(k, "feeRecipient", c.feeRecipient);
         string memory json = vm.serializeAddress(k, "transferHelper", c.helper);
 
-        bool write = vm.isContext(VmSafe.ForgeContext.ScriptBroadcast) && !vm.envOr("DRY_RUN", false);
-        if (write) {
-            vm.writeJson(json, RECORD_PATH);
-            console2.log("record written to", RECORD_PATH, "(deploy.sh adds the tx hash and block)");
-        } else {
-            console2.log("== record (not written)");
-            console2.log(json);
+        console2.log("== record");
+        console2.log(json);
+        if (vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)) {
+            string memory path = vm.envOr("DEPLOY_RECORD", PENDING_RECORD);
+            vm.writeJson(json, path);
+            console2.log("written to", path);
         }
     }
 }
