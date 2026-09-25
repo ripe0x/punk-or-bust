@@ -1,0 +1,17 @@
+{
+  "chainId": "1",
+  "address": "0xA54b44C7a894AA19C49734A753D01f9B8C5f6516",
+  "contract": "src/FWAV2/FWAV2Rewards.sol:FWAV2Rewards",
+  "compiler": "0.8.26+commit.8a97fa7a",
+  "sourceURL": "https://sourcify.dev/server/v2/contract/1/0xA54b44C7a894AA19C49734A753D01f9B8C5f6516?fields=all",
+  "matchId": "49054097",
+  "creationMatch": "match",
+  "runtimeMatch": "match",
+  "verifiedAt": "2026-09-11T04:33:57Z",
+  "vendoredSources": "subset",
+  "sha256": {
+    "FWAV2Rewards.json": "ed57e18a163199981957cf93bdb826c35045ae06febee40070408aa56574c6b7",
+    "compiler-settings.json": "6303359ba0385bf9156b1ec8badfa96b6dad0e43a4b7cc59dbf96be15de3f481",
+    "src/FWAV2/FWAV2Rewards.sol.txt": "a5ffd71544f89699302af84ef374984ccfac222bd7af7b3e82f01e424745efec"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "chainId": "1",
+  "address": "0x958C41181182e76F221331b2755b77D9e1426A98",
+  "contract": "src/FWAV2/FWAV2.sol:FWAV2",
+  "compiler": "0.8.26+commit.8a97fa7a",
+  "sourceURL": "https://sourcify.dev/server/v2/contract/1/0x958C41181182e76F221331b2755b77D9e1426A98?fields=all",
+  "matchId": "48402322",
+  "creationMatch": "match",
+  "runtimeMatch": "match",
+  "verifiedAt": "2026-09-10T04:43:43Z",
+  "vendoredSources": "all",
+  "sha256": {
+    "FWAV2.json": "211ebd4c82f8506b4213070e861e50446f5c935148d738f6da69298951bcac47",
+    "compiler-settings.json": "6303359ba0385bf9156b1ec8badfa96b6dad0e43a4b7cc59dbf96be15de3f481",
+    "lib/chainlink-evm/contracts/src/v0.8/vrf/dev/interfaces/IVRFCoordinatorV2Plus.sol.txt": "b09dc6442316ff371ed04bd1c36a877a071e10d76d0270b6b7a732b38a9114cc",
+    "lib/chainlink-evm/contracts/src/v0.8/vrf/dev/interfaces/IVRFSubscriptionV2Plus.sol.txt": "88fd9e9250d8131d9adf8af753ac2f2e51babec3fe9ba4d5c564a13b91b0933f",
+    "lib/chainlink-evm/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol.txt": "f3b89bb466c2a79b10c1816d342fbfbec49fe82695cba92bd46e7d31af698011",
+    "lib/solady/src/auth/Ownable.sol.txt": "a74625ee15f4872b773cd4730c9b578db57455eb1005ea35f120b5e01e49f753",
+    "lib/solady/src/tokens/ERC721.sol.txt": "e6e83b87598b230481b1ec764c440f1443cfc6e50f9b2b37a16dc894715b0676",
+    "lib/solady/src/utils/ReentrancyGuard.sol.txt": "aeeda18221419e3409255c6505e0eb78fe13e3bd8329663cfa56a0316a970eaf",
+    "lib/solady/src/utils/SafeTransferLib.sol.txt": "395cd7802ab0a7efaf0d7ad33c980bbe45ebf571de660938739fa2d4c6078458",
+    "src/FWAV2/FWAV2.sol.txt": "1b5dbbe6a2c1d15e8df38c075da85036659aacb38936ccd94619b86a8240a425",
+    "src/FWAV2/FWAV2ConfigKeys.sol.txt": "f1ef8a6b8ceec4d6e31746c52585029a4fd72a2c9f84c30587a2e99565aa2287",
+    "src/FWAV2/FWAV2CrownPolicy.sol.txt": "6971facea7907a054ea301b8d7c4002b57112a1730e3eb9cc18f085291516812",
+    "src/interfaces/ICollectionFloorOracle.sol.txt": "59e44b6ac675c5a95e8de6f31e8b88de15102c329676571860cfaa8e49072295",
+    "src/interfaces/IFWAPurchaseCallback.sol.txt": "b0e0d483c824941fc216697367e47e9821b5d90b550ba710651a77ead65f37ed",
+    "src/interfaces/IFWAPurchaseNotifier.sol.txt": "df21367b0b2d0f6eecbab69e4b56f74909bc8347744771409499e316c64a71ac"
+  }
+}

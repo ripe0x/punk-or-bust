@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+import {IFWAPurchaseCallback} from "./IFWAPurchaseCallback.sol";
+
+/// @title IFWAPurchaseNotifier
+/// @notice External adapter used by FWA to notify a recognized FWAIR launch and an ERC-165-opted-in NFT collection.
+/// @dev The pool treats notifier-level failure as an atomic settlement failure. Implementations must
+///      isolate receiver failures and complete within the pool's fixed gas stipend.
+interface IFWAPurchaseNotifier {
+    function notifyPurchase(
+        address launch,
+        uint256 listingId,
+        address purchaser,
+        address resolver,
+        uint256 backing,
+        uint256 settlementAmount,
+        IFWAPurchaseCallback.Outcome outcome
+    ) external;
+}

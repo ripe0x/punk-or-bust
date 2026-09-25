@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+/// @title ICollectionFloorOracle
+/// @notice Interface for a challenge-backed collection floor estimator with a trusted owner override.
+/// @dev The oracle reports when an estimate completed or was manually recorded. Consumers decide whether it is stale.
+interface ICollectionFloorOracle {
+    event ChallengePeriodUpdated(uint48 oldPeriod, uint48 newPeriod);
+    event DepositGateUpdated(address indexed oldGate, address indexed newGate);
+    event ManualFloorSet(
+        address indexed collection,
+        address indexed operator,
+        uint256 oldAskPrice,
+        uint256 newAskPrice,
+        uint256 newBidPrice,
+        uint48 observedAt
+    );
+    event FloorCleared(address indexed collection, address indexed operator, uint256 oldAskPrice, uint48 clearedAt);
+
+    struct Challenge {
+        address maker;
+        uint48 endsAt;
+        uint48 periodUsed;
+        uint40 nonce;
+        uint128 askPrice;
+        uint128 bidPrice;
+        uint256 tokenId;
+    }
+
+    /// @notice Current duration used when a new challenge is opened.
+    function challengePeriod() external view returns (uint48);
+
+    /// @notice Optional shared collection-admission policy. Zero means unrestricted.
+    function depositGate() external view returns (address);
+
+    /// @notice Updates the duration used by future challenges, subject to implementation bounds.
+    /// @dev Existing challenges keep their snapshotted `endsAt`.
+    function setChallengePeriod(uint48 newPeriod) external;
+
+    /// @notice Updates the admission policy used for future proposals. Zero disables enforcement.
+    /// @dev Existing challenges and historical estimates remain resolvable and readable.
+    function setDepositGate(address newGate) external;
+
+    /// @notice Records a trusted owner-supplied ask and a freshly derived 90% bid for a collection.
+    /// @dev An open challenge remains untouched and may later supersede this value. An expired challenge is
+    ///      finalized first. The implementation marks the returned `periodUsed` outside its valid challenge range.
+    function setFloor(address collection, uint256 askPrice) external;
+
+    /// @notice Deletes the current estimate without disturbing an open challenge or its escrow.
+    /// @dev An expired challenge is finalized first so older evidence cannot immediately undo the clear.
+    function clearFloor(address collection) external;
+
+    /// @notice Returns the blanket bid paired with `askPrice`, rounded up to preserve 90% coverage.
+    function bidForAsk(uint256 askPrice) external pure returns (uint256 bidPrice);
+
+    /// @notice Starts a timed challenge using an escrowed NFT ask and a 90% blanket bid.
+    /// @param expectedChallengePeriod Reverts if governance changed the duration before execution.
+    function proposeFloor(address collection, uint256 tokenId, uint256 askPrice, uint48 expectedChallengePeriod)
+        external
+        payable
+        returns (uint40 nonce);
+
+    /// @notice Atomically buys and delivers the escrowed NFT, rejecting the proposed estimate.
+    function buyAsk(address collection, uint40 nonce, address recipient) external payable;
+
+    /// @notice Sells any NFT from the exact collection into the bid and rejects the estimate.
+    function sellIntoBid(address collection, uint40 nonce, uint256 tokenId, uint256 minPayout) external;
+
+    /// @notice Records a custody-verified, untraded challenge and returns its assets.
+    /// @dev Failed asset delivery becomes a pull claim; failed custody verification preserves the old estimate.
+    function finalize(address collection, uint40 nonce) external;
+
+    function withdrawETH(address payable recipient) external returns (uint256 amount);
+
+    function claimNFT(address collection, uint256 tokenId, address recipient) external;
+
+    function ethCredit(address account) external view returns (uint256 amount);
+
+    function nftClaimant(address collection, uint256 tokenId) external view returns (address claimant);
+
+    /// @notice Returns the latest accepted ask estimate and when its challenge ended.
+    /// @dev `(0, 0)` means no estimate. No freshness or minimum-challenge-duration policy is applied here.
+    ///      Security-sensitive consumers should use `getFloorRange` and enforce `periodUsed` as well.
+    function getFloor(address collection) external view returns (uint256 price, uint48 observedAt);
+
+    /// @notice Returns the latest bid/ask range, observation time, and source marker.
+    /// @dev For challenge-backed observations, `periodUsed` is the completed challenge duration. A value outside
+    ///      the implementation's valid challenge-period range marks a trusted manual observation. This is
+    ///      historical evidence, not live liquidity. Every value is zero when no estimate exists.
+    function getFloorRange(address collection)
+        external
+        view
+        returns (uint256 bidPrice, uint256 askPrice, uint48 observedAt, uint48 periodUsed);
+
+    function getChallenge(address collection) external view returns (Challenge memory challenge);
+}
