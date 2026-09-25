@@ -14,7 +14,17 @@ import { Settings } from './Settings';
 import { Sweep } from './Sweep';
 import { Addr, Eth, Field, Section, Stat, TxStatus } from './ui';
 
-export function Dashboard({ vault, viewer }: { vault: Address; viewer?: Address }) {
+export function Dashboard({
+  vault,
+  viewer,
+  pendingCeiling,
+  onCeilingDone,
+}: {
+  vault: Address;
+  viewer?: Address;
+  pendingCeiling?: bigint | null;
+  onCeilingDone?: () => void;
+}) {
   const { state, loading, error } = useVaultState(vault);
   const ev = useVaultEvents(vault);
 
@@ -25,7 +35,10 @@ export function Dashboard({ vault, viewer }: { vault: Address; viewer?: Address 
 
   return (
     <>
-      <Overview vault={vault} state={state} feesPaid={ev.settings.feesPaid} />
+      <Overview vault={vault} state={state} feesPaid={ev.settings.feesPaid} isOwner={isOwner} />
+      {isOwner && pendingCeiling != null && pendingCeiling !== state.gasCeiling ? (
+        <PendingCeiling vault={vault} ceiling={pendingCeiling} onDone={() => onCeilingDone?.()} />
+      ) : null}
       {isOwner ? <OwnerActions vault={vault} state={state} /> : null}
       {!state.rewardsRegistered ? <RegisterRewards vault={vault} /> : null}
       {isOwner ? <Settings vault={vault} state={state} settings={ev.settings} /> : null}
@@ -35,7 +48,7 @@ export function Dashboard({ vault, viewer }: { vault: Address; viewer?: Address 
   );
 }
 
-function Overview({ vault, state, feesPaid }: { vault: Address; state: VaultState; feesPaid: bigint }) {
+function Overview({ vault, state, feesPaid, isOwner }: { vault: Address; state: VaultState; feesPaid: bigint; isOwner: boolean }) {
   const now = useNow(1000);
   const quote = useQuote(state.fwa);
   const s = state;
@@ -48,7 +61,7 @@ function Overview({ vault, state, feesPaid }: { vault: Address; state: VaultStat
 
   return (
     <Section
-      title="Your vault"
+      title={isOwner ? 'Your vault' : 'Vault'}
       actions={<span className={`pill pill-${['idle', 'good', 'warn'][s.status] ?? 'idle'}`}>{vaultStatusLabel(s.status)}</span>}
     >
       <p className="small">
@@ -190,6 +203,31 @@ function RegisterRewards({ vault }: { vault: Address }) {
       <button className="btn-small" disabled={tx.busy} onClick={() => tx.send('Register rewards', { address: vault, abi: vaultAbi, functionName: 'registerRewards' })}>
         Register rewards
       </button>
+      <TxStatus state={tx.state} />
+    </Section>
+  );
+}
+
+function PendingCeiling({ vault, ceiling, onDone }: { vault: Address; ceiling: bigint; onDone: () => void }) {
+  const tx = useTx();
+  return (
+    <Section title="One more step">
+      <p>
+        Your vault is live. New vaults start at a 1.2 gwei gas ceiling. Send one more transaction to set it to {formatGwei(ceiling)} gwei.
+      </p>
+      <div className="row">
+        <button
+          disabled={tx.busy}
+          onClick={async () => {
+            if (await tx.send('Set gas ceiling', { address: vault, abi: vaultAbi, functionName: 'setGasCeiling', args: [ceiling] })) onDone();
+          }}
+        >
+          Set gas ceiling
+        </button>
+        <button className="btn-ghost" onClick={onDone}>
+          Skip
+        </button>
+      </div>
       <TxStatus state={tx.state} />
     </Section>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from 'wagmi';
-import type { Hex } from 'viem';
+import type { Abi, Address, ContractFunctionArgs, ContractFunctionName, Hex } from 'viem';
 import { chain } from '../config';
 import { errorMessage } from '../lib/errors';
 import { requestRefresh } from './refresh';
@@ -13,6 +13,17 @@ export interface TxState {
   label?: string;
   hash?: Hex;
   error?: string;
+}
+
+type Mut = 'nonpayable' | 'payable';
+
+/** A typed contract write: arguments are checked against the ABI. */
+export interface Call<abi extends Abi, fn extends ContractFunctionName<abi, Mut>> {
+  address: Address;
+  abi: abi;
+  functionName: fn;
+  args?: ContractFunctionArgs<abi, Mut, fn>;
+  value?: bigint;
 }
 
 type WriteArgs = Parameters<ReturnType<typeof useWriteContract>['writeContractAsync']>[0];
@@ -27,11 +38,11 @@ export function useTx() {
   const qc = useQueryClient();
 
   const send = useCallback(
-    async (label: string, args: WriteArgs): Promise<boolean> => {
+    async <const abi extends Abi, fn extends ContractFunctionName<abi, Mut>>(label: string, call: Call<abi, fn>): Promise<boolean> => {
       setState({ phase: 'wallet', label });
       try {
         if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
-        const hash = await writeContractAsync({ ...args, chainId: chain.id } as WriteArgs);
+        const hash = await writeContractAsync({ ...call, chainId: chain.id } as unknown as WriteArgs);
         setState({ phase: 'pending', label, hash });
         const receipt = await client!.waitForTransactionReceipt({ hash });
         if (receipt.status !== 'success') {

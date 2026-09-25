@@ -1,5 +1,4 @@
-import { createConfig, http } from 'wagmi';
-import { injected } from 'wagmi/connectors';
+import { createConfig, http, injected } from 'wagmi';
 import { chain, rpcUrl } from './config';
 
 // Injected wallets only. EIP-6963 discovery adds each installed wallet as its own connector.

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Address } from 'viem';
 import { factoryAbi } from '../abi/VaultFactory';
-import { vaultAbi } from '../abi/Vault';
 import { defaultKeeper, factoryAddress } from '../config';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
@@ -13,7 +12,8 @@ import { formatGwei } from '../lib/format';
 import { RunFields, defaultRunForm } from './RunFields';
 import { Addr, Field, Section, TxStatus } from './ui';
 
-export function CreateVault({ predicted, onCreated }: { predicted?: Address; onCreated: () => void }) {
+/** `onCreated` gets the gas ceiling still to set, or null when the default was kept. */
+export function CreateVault({ predicted, onCreated }: { predicted?: Address; onCreated: (pendingCeiling: bigint | null) => void }) {
   const now = useNow(10_000);
   const quote = useQuote(useFactoryFwa());
   const [form, setForm] = useState<RunForm>(() => defaultRunForm(Date.now() / 1000));
@@ -21,7 +21,6 @@ export function CreateVault({ predicted, onCreated }: { predicted?: Address; onC
   const [keeperText, setKeeperText] = useState(defaultKeeper ?? '');
   const [ceiling, setCeiling] = useState(formatGwei(DEFAULT_GAS_CEILING));
   const [tried, setTried] = useState(false);
-  const [needsCeiling, setNeedsCeiling] = useState<bigint | null>(null);
   const tx = useTx();
 
   const run = checkRunForm(form, now, true);
@@ -41,37 +40,9 @@ export function CreateVault({ predicted, onCreated }: { predicted?: Address; onC
       value: run.value!,
     });
     if (!ok) return;
-    // createVault always starts at the default ceiling; a different one is a second transaction.
-    if (gas.wei !== DEFAULT_GAS_CEILING) setNeedsCeiling(gas.wei);
-    else onCreated();
-  }
-
-  async function applyCeiling() {
-    if (!predicted || needsCeiling === null) return;
-    const ok = await tx.send('Set gas ceiling', {
-      address: predicted,
-      abi: vaultAbi,
-      functionName: 'setGasCeiling',
-      args: [needsCeiling],
-    });
-    if (ok) onCreated();
-  }
-
-  if (needsCeiling !== null) {
-    return (
-      <Section title="One more step">
-        <p>Your vault is live. New vaults start at a 1.2 gwei gas ceiling. Send one more transaction to set it to {formatGwei(needsCeiling)} gwei.</p>
-        <div className="row">
-          <button onClick={applyCeiling} disabled={tx.busy}>
-            Set gas ceiling
-          </button>
-          <button className="btn-ghost" onClick={onCreated}>
-            Skip
-          </button>
-        </div>
-        <TxStatus state={tx.state} />
-      </Section>
-    );
+    // createVault always starts at the default ceiling; a different one is a second transaction,
+    // offered on the dashboard.
+    onCreated(gas.wei !== DEFAULT_GAS_CEILING ? gas.wei : null);
   }
 
   const errs = tried ? run.errors : {};
