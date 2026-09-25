@@ -20,3 +20,21 @@ jobs:
         run: forge build --sizes
       - name: Test
         run: forge test -vvv
+
+  fork:
+    runs-on: ubuntu-latest
+    env:
+      # Archive node: every fork suite pins a block, which a pruned node stops serving within minutes.
+      MAINNET_RPC_URL: https://eth.drpc.org
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.foundry/cache/rpc
+          key: foundry-rpc-${{ hashFiles('test/fork/**') }}
+          restore-keys: foundry-rpc-
+      - name: Fork tests
+        run: forge test --match-path "test/fork/*" -vvv

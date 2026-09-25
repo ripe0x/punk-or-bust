@@ -4,13 +4,16 @@ Behaviors of the FWA V2 pool that the vault must handle. Each line cites the ver
 `refs/fwa-v2/src/FWAV2/FWAV2.sol.txt` or `refs/fwa-v2-rewards/src/FWAV2/FWAV2Rewards.sol.txt`.
 Each hazard gets at least one test.
 
-1. **24-hour purchaser window.** Only the purchaser can settle an allocated listing for
-   `settlementWindow` (24 hours by default) after allocation. After that the depositor can resolve
+1. **Short purchaser window.** Only the purchaser can settle an allocated listing for
+   `settlementWindow` after allocation (source default 24 hours; **live mainnet value 1 hour**
+   at block 26,055,939; always read live). After that the depositor can resolve
    it: `depositorReclaimNFT` pays the purchaser the ETH bid, `depositorReclaimBacking` gives the
    purchaser the NFT and keeps the ETH. The depositor picks whichever hurts the purchaser, so every
    miss must settle inside the window.
-2. **7-day finalize.** After `finalizeWindow` (7 days) anyone can call `finalizeUnsettled`, which
-   sends the NFT to the purchaser. The vault can receive NFTs it never chose to keep.
+2. **Finalize.** After `finalizeWindow` (source default 7 days; **live mainnet value 1 hour**)
+   anyone can call `finalizeUnsettled`, which sends the NFT to the purchaser. With the live
+   values, a miss not settled within an hour of allocation can end up as an NFT in the vault
+   instead of ETH, so keepers must sync well inside that hour. The vault can receive NFTs it never chose to keep.
 3. **ETH arrives without attribution.** Depositor resolution pays the purchaser with
    `forceSafeTransferETH`, so ETH lands in the vault with no pull id and no callback. The vault
    reconciles by balance, not by events.
