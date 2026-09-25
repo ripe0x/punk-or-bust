@@ -135,8 +135,11 @@ abstract contract ForkBase is Test {
         });
         vm.deal(owner, value);
         vm.prank(owner);
-        vault =
-            Vault(payable(factory.createVault{value: value}(keep, new Vault.KeepToken[](0), new address[](0), params)));
+        vault = Vault(
+            payable(factory.createVault{value: value}(
+                    keep, new Vault.KeepToken[](0), new address[](0), params, 1.2 gwei, true
+                ))
+        );
     }
 
     function _tree(uint256 node) internal view returns (uint256) {

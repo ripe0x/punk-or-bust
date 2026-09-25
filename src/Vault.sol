@@ -45,6 +45,15 @@ contract Vault is ReentrancyGuardTransient {
         Auctioning
     }
 
+    enum WindDownReason {
+        Owner,
+        Floor,
+        Deadline,
+        Keeps,
+        MaxPulls,
+        PriceCap
+    }
+
     struct RunParams {
         uint256 maxDrawdownBps;
         uint256 maxPullCostWei;
@@ -65,6 +74,8 @@ contract Vault is ReentrancyGuardTransient {
 
     struct Auction {
         uint256 listingId;
+        address collection;
+        uint256 tokenId;
         uint256 backstop;
         uint256 highBid;
         address highBidder;
@@ -141,6 +152,8 @@ contract Vault is ReentrancyGuardTransient {
     uint256 public idle;
     /// @notice Pull fees earned by completed pulls and not yet paid to `FEE_RECIPIENT`.
     uint256 public feeOwed;
+    /// @notice Pull fees paid to `FEE_RECIPIENT` over the vault's life.
+    uint256 public feesPaid;
 
     RunParams public run;
     uint256 public runStartValue;
@@ -181,7 +194,7 @@ contract Vault is ReentrancyGuardTransient {
     error AuctionNotEnded();
 
     event RunStarted(uint256 runStartValue, RunParams params);
-    event RunWindingDown();
+    event RunWindingDown(WindDownReason reason);
     event RunEnded(uint256 returned);
     event Deposited(uint256 amount);
     event Withdrawn(uint256 amount);
@@ -237,14 +250,16 @@ contract Vault is ReentrancyGuardTransient {
         address[] calldata collections,
         KeepToken[] calldata tokens,
         address[] calldata keepers,
-        RunParams calldata params
+        RunParams calldata params,
+        uint256 ceiling,
+        bool autoReturn_
     ) external payable nonReentrant {
         if (msg.sender != FACTORY) revert Unauthorized();
         if (OWNER != address(0)) revert AlreadyInitialized();
         if (owner_ == address(0)) revert BadParams();
         OWNER = owner_;
-        autoReturn = true;
-        gasCeiling = DEFAULT_GAS_CEILING;
+        _setAutoReturn(autoReturn_);
+        _setGasCeiling(ceiling);
         bountyWei = DEFAULT_BOUNTY;
         syncBountyMaxWei = DEFAULT_SYNC_BOUNTY_MAX;
         _setKeepCollections(collections, true);
@@ -270,7 +285,7 @@ contract Vault is ReentrancyGuardTransient {
     /// @notice No new pulls; in-flight pulls resolve through `sync`, then the vault is `Idle`.
     function stop() external onlyOwner nonReentrant {
         if (status != Status.Running) revert BadStatus();
-        _windDown();
+        _windDown(WindDownReason.Owner);
         _finishIfDone();
     }
 
@@ -308,11 +323,9 @@ contract Vault is ReentrancyGuardTransient {
 
         RunParams memory p = run;
         uint256 inFlight = _outstanding.length + _openAuctionIds.length;
-        if (
-            block.timestamp > p.deadline || pullsRequested >= p.maxPulls
-                || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)
-        ) {
-            _windDown();
+        (bool limit, WindDownReason reason) = _runLimit(p, true);
+        if (limit) {
+            _windDown(reason);
         } else {
             if (inFlight >= MAX_OUTSTANDING) revert TooManyOutstanding();
             if (IFWAV2(FWA).isPurchaseBlackout()) revert PurchaseBlackout();
@@ -320,7 +333,7 @@ contract Vault is ReentrancyGuardTransient {
             if (total == 0) revert NotPriced();
             // SPEC: a quote above maxPullCostWei is "FWA config outside the run's bounds" and ends the run.
             if (total > p.maxPullCostWei) {
-                _windDown();
+                _windDown(WindDownReason.PriceCap);
             } else {
                 requested = _min(_min(count, MAX_OUTSTANDING - inFlight), p.maxPulls - pullsRequested);
                 // SPEC: the floor check prices each pull at its quote plus the pull fee it would owe.
@@ -328,7 +341,7 @@ contract Vault is ReentrancyGuardTransient {
                 if (requested == 0) {
                     // The run ends on the floor only when nothing is in flight.
                     if (inFlight != 0) revert FloorReached();
-                    _windDown();
+                    _windDown(WindDownReason.Floor);
                 } else {
                     _acquire(requested, total);
                 }
@@ -365,8 +378,8 @@ contract Vault is ReentrancyGuardTransient {
         _absorb();
         _payFees();
         if (status == Status.Running) {
-            RunParams memory p = run;
-            if (block.timestamp > p.deadline || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)) _windDown();
+            (bool limit, WindDownReason reason) = _runLimit(run, false);
+            if (limit) _windDown(reason);
         }
         // SPEC: the caller is paid before auto-return, so the sync that ends a run is paid too.
         if (resolved != 0 || processed) _reimburse(gasStart, SYNC_GAS_CAP, true, _syncBounty(oldest));
@@ -393,7 +406,7 @@ contract Vault is ReentrancyGuardTransient {
         Auction storage a = auctions[requestId];
         if (block.timestamp >= a.deadline) revert AuctionEnded();
         uint256 prev = a.highBid;
-        if (msg.value < (prev == 0 ? a.backstop : prev) * BID_STEP_BPS / BPS) revert BidTooLow();
+        if (msg.value < _minBid(a)) revert BidTooLow();
         address prevBidder = a.highBidder;
         a.highBid = msg.value;
         a.highBidder = msg.sender;
@@ -487,14 +500,11 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     function setAutoReturn(bool enabled) external onlyOwner nonReentrant {
-        autoReturn = enabled;
-        emit AutoReturnSet(enabled);
+        _setAutoReturn(enabled);
     }
 
     function setGasCeiling(uint256 ceiling) external onlyOwner nonReentrant {
-        if (ceiling == 0 || ceiling > MAX_GAS_CEILING) revert BadParams();
-        gasCeiling = ceiling;
-        emit GasCeilingSet(ceiling);
+        _setGasCeiling(ceiling);
     }
 
     function setPrivateMode(bool enabled) external onlyOwner nonReentrant {
@@ -579,6 +589,28 @@ contract Vault is ReentrancyGuardTransient {
 
     function openAuctionIds() external view returns (uint256[] memory) {
         return _openAuctionIds;
+    }
+
+    /// @notice A miss auction's record and the smallest bid `bid` accepts now. Zero for an unknown id.
+    function auctionInfo(uint256 requestId)
+        external
+        view
+        returns (
+            uint256 listingId,
+            address collection,
+            uint256 tokenId,
+            uint256 backstop,
+            uint256 highBid,
+            address highBidder,
+            uint256 deadline,
+            uint256 hardDeadline,
+            uint256 minNextBid
+        )
+    {
+        Auction storage a = auctions[requestId];
+        (listingId, collection, tokenId, backstop, highBid, highBidder, deadline, hardDeadline) =
+        (a.listingId, a.collection, a.tokenId, a.backstop, a.highBid, a.highBidder, a.deadline, a.hardDeadline);
+        minNextBid = _minBid(a);
     }
 
     /// @notice For callers deciding when to sync or finalize. `resolvable`: outstanding pulls FWA no
@@ -736,6 +768,8 @@ contract Vault is ReentrancyGuardTransient {
                 uint256 deadline = _min(block.timestamp + AUCTION_DURATION, hard);
                 auctions[requestId] = Auction({
                     listingId: listingId,
+                    collection: s.collection,
+                    tokenId: s.tokenId,
                     backstop: backstop,
                     highBid: 0,
                     highBidder: address(0),
@@ -798,9 +832,28 @@ contract Vault is ReentrancyGuardTransient {
         emit BidRefunded(to, amount, credited);
     }
 
-    function _windDown() internal {
+    function _windDown(WindDownReason reason) internal {
         status = Status.WindingDown;
-        emit RunWindingDown();
+        emit RunWindingDown(reason);
+    }
+
+    /// @dev The run limit that ends the run now, if any. `pulling` adds the pull cap.
+    function _runLimit(RunParams memory p, bool pulling) internal view returns (bool, WindDownReason) {
+        if (block.timestamp > p.deadline) return (true, WindDownReason.Deadline);
+        if (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps) return (true, WindDownReason.Keeps);
+        if (pulling && pullsRequested >= p.maxPulls) return (true, WindDownReason.MaxPulls);
+        return (false, WindDownReason.Owner);
+    }
+
+    function _setAutoReturn(bool enabled) internal {
+        autoReturn = enabled;
+        emit AutoReturnSet(enabled);
+    }
+
+    function _setGasCeiling(uint256 ceiling) internal {
+        if (ceiling == 0 || ceiling > MAX_GAS_CEILING) revert BadParams();
+        gasCeiling = ceiling;
+        emit GasCeilingSet(ceiling);
     }
 
     function _finishIfDone() internal {
@@ -825,6 +878,7 @@ contract Vault is ReentrancyGuardTransient {
         uint256 amount = _min(feeOwed, idle);
         if (amount == 0) return;
         feeOwed -= amount;
+        feesPaid += amount;
         idle -= amount;
         SafeTransferLib.forceSafeTransferETH(FEE_RECIPIENT, amount);
         emit FeePaid(amount);
@@ -835,6 +889,11 @@ contract Vault is ReentrancyGuardTransient {
         if (amount == 0) return 0;
         idle = 0;
         SafeTransferLib.forceSafeTransferETH(OWNER, amount);
+    }
+
+    function _minBid(Auction storage a) internal view returns (uint256) {
+        uint256 prev = a.highBid;
+        return (prev == 0 ? a.backstop : prev) * BID_STEP_BPS / BPS;
     }
 
     function _removeAuction(uint256 requestId) internal {

@@ -88,7 +88,8 @@ contract VaultAuctionTest is VaultTestBase {
     }
 
     function _auction(uint256 requestId) internal view returns (Vault.Auction memory a) {
-        (a.listingId, a.backstop, a.highBid, a.highBidder, a.deadline, a.hardDeadline) = vault.auctions(requestId);
+        (a.listingId, a.collection, a.tokenId, a.backstop, a.highBid, a.highBidder, a.deadline, a.hardDeadline) =
+            vault.auctions(requestId);
     }
 
     function _bid(address bidder, uint256 requestId, uint256 amount) internal {
@@ -504,6 +505,7 @@ contract VaultAuctionTest is VaultTestBase {
         vm.warp(_auction(id).deadline);
         vm.fee(1 gwei);
         vm.txGasPrice(1 gwei);
+        uint256 before = keeper.balance;
         vm.recordLogs();
         vm.prank(keeper);
         vault.finalizeAuction(id);
@@ -515,7 +517,7 @@ contract VaultAuctionTest is VaultTestBase {
             }
         }
         assertGt(amount, 0, "reimbursed");
-        assertEq(keeper.balance, amount + vault.bountyWei(), "gas plus bounty");
+        assertEq(keeper.balance - before, amount + vault.bountyWei(), "gas plus bounty");
         assertLe(amount, vault.FINALIZE_GAS_CAP() * 1 gwei, "bounded");
     }
 
@@ -541,6 +543,35 @@ contract VaultAuctionTest is VaultTestBase {
         assertEq(ids.length, 3, "three open");
         assertEq(ids[0], a, "first");
         assertEq(ids[2], c, "third");
+
+        _bid(alice, b, 1 ether);
+        (
+            uint256 listingId,
+            address collection,
+            uint256 tokenId,
+            uint256 backstop,
+            uint256 highBid,
+            address highBidder,
+            uint256 deadline,
+            uint256 hardDeadline,
+            uint256 minNextBid
+        ) = vault.auctionInfo(b);
+        assertEq(listingId, _auction(b).listingId, "listing");
+        assertEq(collection, address(nft), "collection");
+        assertEq(tokenId, 2, "token");
+        assertEq(backstop, 0.9 ether, "backstop");
+        assertEq(highBid, 1 ether, "high bid");
+        assertEq(highBidder, alice, "high bidder");
+        assertEq(deadline, _auction(b).deadline, "deadline");
+        assertEq(hardDeadline, _auction(b).hardDeadline, "hard deadline");
+        assertEq(minNextBid, 1.05 ether, "high bid plus 5%");
+        (,,,,,,,, minNextBid) = vault.auctionInfo(c);
+        assertEq(minNextBid, 0.945 ether, "backstop plus 5%");
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(Vault.BidTooLow.selector);
+        vault.bid{value: minNextBid - 1}(c);
+        _bid(bob, c, minNextBid);
         (,, uint256 past) = vault.syncStatus();
         assertEq(past, 0, "none past deadline");
 
