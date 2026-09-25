@@ -17,7 +17,7 @@ Target chain: Ethereum mainnet, FWA V2 pool `0x958C41181182e76F221331b2755b77D9e
 
 | Contract | Role |
 |---|---|
-| `VaultFactory` | Clones one vault per user (CREATE2, salt from the owner), keeps the registry, and presents the "series" interface the shared reward vault expects. No admin. |
+| `VaultFactory` | Deploys the router and the vault implementation in its constructor `(fwa, rewardVault, feeRecipient, transferHelper)`. Clones one vault per user (CREATE2, salt from the owner), keeps the registry, and presents the "series" interface the shared reward vault expects. No admin. |
 | `Vault` | One per user. FWA's purchaser of record. Holds the user's ETH, runs pulls, routes reveals. Clone of one implementation. |
 | `PurchaseRouter` | Shared. The only caller of `FWA.acquire`, so FWA's builder reward accrues to it. Accepts ETH only from factory vaults. Fixed treasury. No admin. |
 | Execution module (if needed) | Delegatecall target for vault code that does not fit under EIP-170. Only split if the size forces it. |
@@ -35,7 +35,8 @@ External, already deployed:
 
 - Fee recipient and router treasury: `0xea194A186EBe76A84E2B2027f5f23F81939c05AD`. Immutable.
 - Pull fee: **0.025%** (250 parts per million) of the ETH purchase price of each completed pull,
-  excluding VRF. Failed or refunded pulls pay nothing. Charged once, when the pull completes.
+  excluding VRF. A pull is completed once FWA allocates it a listing, including forced outcomes.
+  Failed or refunded pulls pay nothing. Charged once.
 - Builder reward: FWA pays a share of its protocol fee (currently 1,500 bps of it) to the address
   that calls `acquire`, and only when that caller is not the purchaser. The router is the caller
   and the vault is the purchaser, so the reward accrues to the router and goes to the treasury. It
@@ -53,7 +54,7 @@ States: `Idle`, `Running`, `WindingDown`.
 - `vault.startRun{value}(runParams)` from `Idle`. One run at a time.
 - `stop()` (owner): no new pulls; in-flight pulls and auctions resolve; then `Idle`.
 - A run ends on its own at: drawdown floor, keep target reached, deadline, pull cap, or FWA
-  config outside the run's bounds. Then `WindingDown`, then `Idle`.
+  config outside the run's bounds (a quote above `maxPullCostWei`). Then `WindingDown`, then `Idle`.
 - Auto-return: when the last in-flight item of a run resolves, the vault sends its idle ETH to the
   owner. Default on, owner-settable.
 - `withdraw()` (owner) any time the vault is `Idle`.
@@ -82,15 +83,21 @@ run can never pull. Allowed, and the UI says so.
 - Spending ETH on pulls (`requestPulls`): owner or an approved keeper.
 - Everything that only brings value back (sync reveals, settle, finalize auctions, recover forced
   or stuck outcomes, claim refunds, harvest rewards): anyone.
-- Keepers are reimbursed from the vault at `min(basefee + priority cap, tx.gasprice, ceiling)`,
-  bounded per call. Above the ceiling a keeper may still act but is not reimbursed.
+- Keepers are reimbursed from the vault at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
+  capped per call, never more than idle ETH. Only approved keepers are reimbursed, and a `sync`
+  only when it resolves something.
+- A keeper cannot `requestPulls` when `tx.gasprice` is above the owner's ceiling (pull cost rises
+  with gas). The owner can pull at any gas price.
+- A keeper's pull request first reserves its worst-case reimbursement, so keeper spending never
+  crosses the drawdown floor.
 
 ## Drawdown floor
 
 `floor = runStartValue * (10_000 - maxDrawdownBps) / 10_000`. A pull is allowed only if
 `value - nextPullCost >= floor`, where value is idle ETH plus guaranteed receivables (revealed
 pulls at their backstop) plus kept NFTs at the backstop given up for them. In-flight requests
-count as zero. The run ends on the floor only when nothing is in flight. Deposits during a run
+count as zero, and so do allocated pulls not yet synced. Each pull is priced at its quote plus
+its pull fee. The run ends on the floor only when nothing is in flight. Deposits during a run
 raise `runStartValue` by the deposit.
 
 ## Reveal routing
