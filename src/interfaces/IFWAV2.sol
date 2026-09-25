@@ -58,6 +58,18 @@ interface IFWAV2 {
             uint256 randomWord
         );
 
+    /// @notice The collection floor oracle the pool bounds listings with.
+    function floorOracle() external view returns (address);
+
+    /// @notice Maximum age, in seconds, of a floor observation the pool accepts.
+    function maxOracleAge() external view returns (uint48);
+
+    /// @notice Minimum completed challenge duration, in seconds, of a floor observation the pool accepts.
+    function minOracleChallengePeriod() external view returns (uint48);
+
+    /// @notice Collections listed without a floor oracle bound.
+    function oracleExemptCollections(address collection) external view returns (bool);
+
     /// @notice Recomputes the pool's outstanding-callback counter from its own records. Permissionless.
     function reconcileUnfulfilledVrfCount() external returns (uint256 reconciled);
 }

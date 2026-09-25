@@ -20,10 +20,13 @@ interface IVaultFactory {
 /// @title Vault
 /// @notice One per owner, cloned by `VaultFactory`. FWA's purchaser of record: holds the owner's ETH,
 ///         requests pulls through the shared router, and routes every reveal to the owner's wallet
-///         (keep list) or back to FWA for ETH, which recycles into further pulls until the run stops.
+///         (keep list), a short miss auction, or back to FWA for ETH, which recycles into further
+///         pulls until the run stops.
 /// @dev ETH ledger: `idle` is the owner's spendable ETH. Every outflow debits it; every inflow is
 ///      credited by balance reconciliation (`_absorb`), never by events, so ETH FWA pushes without a
 ///      callback (depositor resolution, refunds) is counted the same as ETH from a settlement call.
+///      Escrowed bids (`bidEscrow`) and credited bid refunds (`creditedRefunds`) belong to bidders
+///      and are excluded from reconciliation, so they never reach `idle`.
 contract Vault is ReentrancyGuardTransient {
     enum Status {
         Idle,
@@ -31,14 +34,15 @@ contract Vault is ReentrancyGuardTransient {
         WindingDown
     }
 
-    /// @dev M2 appends `Auctioning` for reveals held in a miss auction. Values are append-only.
+    /// @dev Values are append-only.
     enum PullStatus {
         None,
         Pending,
         Kept,
         Sold,
         Forced,
-        Refunded
+        Refunded,
+        Auctioning
     }
 
     struct RunParams {
@@ -59,6 +63,15 @@ contract Vault is ReentrancyGuardTransient {
         PullStatus status;
     }
 
+    struct Auction {
+        uint256 listingId;
+        uint256 backstop;
+        uint256 highBid;
+        address highBidder;
+        uint256 deadline;
+        uint256 hardDeadline;
+    }
+
     uint256 public constant BPS = 10_000;
     uint256 public constant PULL_FEE_PPM = 250;
     uint256 public constant PPM = 1_000_000;
@@ -74,6 +87,20 @@ contract Vault is ReentrancyGuardTransient {
     uint256 public constant GAS_OVERHEAD = 40_000;
     uint256 public constant REQUEST_GAS_CAP = 1_500_000;
     uint256 public constant SYNC_GAS_CAP = 3_000_000;
+    uint256 public constant FINALIZE_GAS_CAP = 1_000_000;
+
+    uint256 public constant AUCTION_GAP_BPS = 900;
+    uint256 public constant AUCTION_MIN_SURPLUS = 0.01 ether;
+    uint256 public constant AUCTION_NO_ORACLE_BACKING = 1 ether;
+    uint256 public constant AUCTION_MAX_DURATION = 60 minutes;
+    uint256 public constant AUCTION_EXTENSION = 5 minutes;
+    uint256 public constant BID_STEP_BPS = 10_500;
+    // SPEC: an auction opens for 30 minutes, so late bids have room to extend it toward the 60 minute cap.
+    uint256 public constant AUCTION_DURATION = 30 minutes;
+    // SPEC: the settle buffer is 30 minutes; an auction never runs past allocation + window - buffer.
+    uint256 public constant AUCTION_SETTLE_BUFFER = 30 minutes;
+    // SPEC: at most 8 open auctions per vault; at the cap a miss sells back.
+    uint256 public constant MAX_AUCTIONS = 8;
 
     uint8 internal constant ACQ_FULFILLED = uint8(IFWA.AcquisitionStatus.Fulfilled);
     uint8 internal constant ACQ_EXPIRED = uint8(IFWA.AcquisitionStatus.Expired);
@@ -114,6 +141,15 @@ contract Vault is ReentrancyGuardTransient {
     uint256[] internal _outstanding;
     mapping(uint256 requestId => Pull) public pulls;
 
+    mapping(uint256 requestId => Auction) public auctions;
+    uint256 public openAuctions;
+    /// @notice ETH held for current high bids. Never part of `idle`.
+    uint256 public bidEscrow;
+    /// @notice Sum of `bidRefunds`. Never part of `idle`.
+    uint256 public creditedRefunds;
+    /// @notice Outbid or failed-delivery refunds whose push failed, claimable by the bidder.
+    mapping(address bidder => uint256) public bidRefunds;
+
     error Unauthorized();
     error AlreadyInitialized();
     error BadStatus();
@@ -125,6 +161,9 @@ contract Vault is ReentrancyGuardTransient {
     error GasPriceTooHigh();
     error FloorReached();
     error AccruedNotSupported();
+    error BidTooLow();
+    error AuctionEnded();
+    error AuctionNotEnded();
 
     event RunStarted(uint256 runStartValue, RunParams params);
     event RunWindingDown();
@@ -142,6 +181,13 @@ contract Vault is ReentrancyGuardTransient {
     event AutoReturnSet(bool enabled);
     event GasCeilingSet(uint256 ceiling);
     event RewardsRegistered();
+    event AuctionStarted(
+        uint256 indexed requestId, uint256 indexed listingId, uint256 backstop, uint256 deadline, uint256 hardDeadline
+    );
+    event BidPlaced(uint256 indexed requestId, address indexed bidder, uint256 amount, uint256 deadline);
+    event BidRefunded(address indexed bidder, uint256 amount, bool credited);
+    event BidRefundClaimed(address indexed bidder, address to, uint256 amount);
+    event AuctionFinalized(uint256 indexed requestId, address indexed winner, uint256 amount);
 
     modifier onlyOwner() {
         if (msg.sender != OWNER) revert Unauthorized();
@@ -238,7 +284,7 @@ contract Vault is ReentrancyGuardTransient {
         _absorb();
 
         RunParams memory p = run;
-        uint256 inFlight = _outstanding.length;
+        uint256 inFlight = _outstanding.length + openAuctions;
         if (
             block.timestamp > p.deadline || pullsRequested >= p.maxPulls
                 || (p.stopAfterKeeps != 0 && keeps >= p.stopAfterKeeps)
@@ -270,7 +316,8 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     /// @notice Resolves up to `maxCount` outstanding pulls: routes every reveal (keep list to the
-    ///         owner, otherwise sell back), records forced outcomes, and takes refund credit.
+    ///         owner, a miss auction, or sell back), records forced outcomes, and takes refund credit.
+    ///         Auctions are finalized separately by `finalizeAuction`.
     ///         Permissionless; approved keepers are reimbursed when it resolves something.
     function sync(uint256 maxCount) external nonReentrant returns (uint256 resolved) {
         uint256 gasStart = gasleft();
@@ -296,11 +343,85 @@ contract Vault is ReentrancyGuardTransient {
         if (resolved != 0) _reimburse(gasStart, SYNC_GAS_CAP);
     }
 
-    /// @notice Self-call boundary so a failed keep or sale reverts alone and routing can fall back.
-    function settleSelf(uint256 listingId, bool keep) external {
+    /// @notice Self-call boundary so a failed keep, delivery or sale reverts alone and routing can
+    ///         fall back. `keepTo` zero sells back; otherwise the NFT goes to `keepTo`.
+    function settleSelf(uint256 listingId, address keepTo) external {
         if (msg.sender != address(this)) revert Unauthorized();
-        if (keep) FwaClientLib.keepAndForward(FWA, listingId, OWNER);
+        if (keepTo != address(0)) FwaClientLib.keepAndForward(FWA, listingId, keepTo);
         else FwaClientLib.settleForEth(FWA, listingId);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                             MISS AUCTION                            */
+    /* ------------------------------------------------------------------ */
+
+    /// @notice Bids on a miss auction. The first bid is at least the backstop plus 5%, each later bid
+    ///         the high bid plus 5%. A bid in the last 5 minutes extends the auction by 5 minutes, up
+    ///         to its hard deadline. The previous high bid is refunded, or credited if the push fails.
+    function bid(uint256 requestId) external payable nonReentrant {
+        if (pulls[requestId].status != PullStatus.Auctioning) revert BadStatus();
+        Auction storage a = auctions[requestId];
+        if (block.timestamp >= a.deadline) revert AuctionEnded();
+        uint256 prev = a.highBid;
+        if (msg.value < (prev == 0 ? a.backstop : prev) * BID_STEP_BPS / BPS) revert BidTooLow();
+        address prevBidder = a.highBidder;
+        a.highBid = msg.value;
+        a.highBidder = msg.sender;
+        bidEscrow += msg.value;
+        if (a.deadline - block.timestamp < AUCTION_EXTENSION) {
+            a.deadline = _min(block.timestamp + AUCTION_EXTENSION, a.hardDeadline);
+        }
+        emit BidPlaced(requestId, msg.sender, msg.value, a.deadline);
+        if (prev != 0) _refundBid(prevBidder, prev);
+    }
+
+    /// @notice Ends a miss auction after its deadline. The high bidder gets the NFT and the bid joins
+    ///         idle ETH; with no bid or a failed delivery the bid is refunded and the vault sells back.
+    ///         A listing already settled by other means is recorded as forced. Permissionless;
+    ///         approved keepers are reimbursed.
+    function finalizeAuction(uint256 requestId) external nonReentrant {
+        uint256 gasStart = gasleft();
+        if (pulls[requestId].status != PullStatus.Auctioning) revert BadStatus();
+        Auction storage a = auctions[requestId];
+        if (block.timestamp < a.deadline) revert AuctionNotEnded();
+        uint256 listingId = a.listingId;
+        uint256 amount = a.highBid;
+        address winner = a.highBidder;
+        --openAuctions;
+
+        PullStatus outcome = PullStatus.Sold;
+        if (FwaClientLib.listing(FWA, listingId).status != LISTING_ALLOCATED) {
+            outcome = PullStatus.Forced;
+            emit PullForced(requestId, listingId, FwaClientLib.classifyForced(FWA, listingId));
+            if (winner != address(0)) _refundBid(winner, amount);
+            winner = address(0);
+        } else if (winner != address(0) && _deliver(listingId, winner)) {
+            bidEscrow -= amount;
+        } else {
+            if (winner != address(0)) _refundBid(winner, amount);
+            winner = address(0);
+            // SPEC: a failed sale reverts the whole finalize so it can be retried; the bidder stays high.
+            FwaClientLib.settleForEth(FWA, listingId);
+        }
+        pulls[requestId].status = outcome;
+        emit AuctionFinalized(requestId, winner, winner == address(0) ? 0 : amount);
+        emit PullResolved(requestId, listingId, outcome);
+
+        _absorb();
+        _payFees();
+        _finishIfDone();
+        _reimburse(gasStart, FINALIZE_GAS_CAP);
+    }
+
+    /// @notice Sends the caller's credited bid refunds to `to`.
+    // SPEC: the claim names a recipient, so a bidder that cannot receive ETH is not locked out.
+    function claimBidRefund(address to) external nonReentrant returns (uint256 amount) {
+        amount = bidRefunds[msg.sender];
+        if (amount == 0 || to == address(0)) revert BadParams();
+        bidRefunds[msg.sender] = 0;
+        creditedRefunds -= amount;
+        SafeTransferLib.safeTransferETH(to, amount);
+        emit BidRefundClaimed(msg.sender, to, amount);
     }
 
     /// @notice Pulls an NFT FWA failed to deliver to this vault. It stays here for `sweepNft`.
@@ -383,7 +504,8 @@ contract Vault is ReentrancyGuardTransient {
     /*                                VIEWS                                */
     /* ------------------------------------------------------------------ */
 
-    /// @notice Idle ETH plus kept NFTs at their backstop, less fees owed. In-flight pulls count as zero.
+    /// @notice Idle ETH plus kept NFTs at their backstop, less fees owed. In-flight pulls and open
+    ///         auctions count as zero.
     // SPEC: an allocated pull not yet synced also counts as zero (conservative); M1 routes at reveal
     // in the same `sync`, so there is no separate revealed receivable.
     function runValue() public view returns (uint256) {
@@ -399,6 +521,7 @@ contract Vault is ReentrancyGuardTransient {
         return _outstanding;
     }
 
+    /// @notice Pulls awaiting reveal or routing. Open auctions are counted in `openAuctions`.
     function outstandingCount() external view returns (uint256) {
         return _outstanding.length;
     }
@@ -461,7 +584,7 @@ contract Vault is ReentrancyGuardTransient {
         if (acquisition == ACQ_FULFILLED) {
             FwaClientLib.ListingSnapshot memory s = FwaClientLib.listing(FWA, listingId);
             if (s.status == LISTING_ALLOCATED) {
-                outcome = _route(listingId, s);
+                outcome = _route(requestId, listingId, s);
                 if (outcome == PullStatus.None) return false;
             } else {
                 outcome = PullStatus.Forced;
@@ -479,24 +602,88 @@ contract Vault is ReentrancyGuardTransient {
         return true;
     }
 
-    /// @dev Keep list (token entry, then collection) goes to the owner; a failed keep or any other
-    ///      reveal sells back. `None` when even the sale failed, so the pull stays outstanding.
-    function _route(uint256 listingId, FwaClientLib.ListingSnapshot memory s) internal returns (PullStatus) {
+    /// @dev Keep list (token entry, then collection) goes to the owner; a failed keep sells back; any
+    ///      other reveal opens a miss auction when `_auctionEnd` allows one, else sells back. `None` when
+    ///      even the sale failed, so the pull stays outstanding.
+    function _route(uint256 requestId, uint256 listingId, FwaClientLib.ListingSnapshot memory s)
+        internal
+        returns (PullStatus)
+    {
+        uint256 backstop = s.value * IFWA(FWA).settlementDiscountBps() / BPS;
         if (
             (keepToken[s.collection][s.tokenId] || keepCollection[s.collection])
                 && !FwaClientLib.forcesEthSettlement(s.collection)
         ) {
-            try this.settleSelf(listingId, true) {
-                keptValue += s.value * IFWA(FWA).settlementDiscountBps() / BPS;
+            try this.settleSelf(listingId, OWNER) {
+                keptValue += backstop;
                 ++keeps;
                 return PullStatus.Kept;
             } catch {}
+            // SPEC: a failed keep goes straight to sell back (routing step 3), never to an auction.
+        } else {
+            uint256 hard = _auctionEnd(s, backstop);
+            if (hard != 0) {
+                uint256 deadline = _min(block.timestamp + AUCTION_DURATION, hard);
+                auctions[requestId] = Auction({
+                    listingId: listingId,
+                    backstop: backstop,
+                    highBid: 0,
+                    highBidder: address(0),
+                    deadline: deadline,
+                    hardDeadline: hard
+                });
+                ++openAuctions;
+                emit AuctionStarted(requestId, listingId, backstop, deadline, hard);
+                return PullStatus.Auctioning;
+            }
         }
-        try this.settleSelf(listingId, false) {
+        try this.settleSelf(listingId, address(0)) {
             return PullStatus.Sold;
         } catch {
             return PullStatus.None;
         }
+    }
+
+    /// @dev The hard deadline of a miss auction for this reveal, or zero when it sells back: the
+    ///      auction cap is reached, the collection is not auction-eligible, too little of the
+    ///      settlement window remains, or the oracle rule (fresh reading) or the backing rule (no
+    ///      fresh reading) does not call for one.
+    function _auctionEnd(FwaClientLib.ListingSnapshot memory s, uint256 backstop) internal view returns (uint256 hard) {
+        if (openAuctions >= MAX_AUCTIONS || backstop == 0 || FwaClientLib.forcesEthSettlement(s.collection)) return 0;
+        uint256 windowEnd = uint256(s.allocatedAt) + IFWA(FWA).settlementWindow();
+        // SPEC: an auction that could not run at least one extension period sells back instead.
+        if (windowEnd < block.timestamp + AUCTION_SETTLE_BUFFER + AUCTION_EXTENSION) return 0;
+        hard = _min(block.timestamp + AUCTION_MAX_DURATION, windowEnd - AUCTION_SETTLE_BUFFER);
+        (bool fresh, uint256 oracleBid) = FwaClientLib.freshFloorBid(FWA, s.collection);
+        if (fresh) {
+            if (
+                oracleBid <= backstop || oracleBid - backstop < AUCTION_MIN_SURPLUS
+                    || (oracleBid - backstop) * BPS / backstop < AUCTION_GAP_BPS
+            ) return 0;
+        } else if (s.value < AUCTION_NO_ORACLE_BACKING) {
+            return 0;
+        }
+    }
+
+    /// @dev True when the NFT reached `to`.
+    function _deliver(uint256 listingId, address to) internal returns (bool) {
+        try this.settleSelf(listingId, to) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @dev Pushes a bid back under a gas stipend; a failed push becomes a claimable credit.
+    // SPEC: the push uses a 100,000 gas stipend so a hostile receiver cannot block a new bid.
+    function _refundBid(address to, uint256 amount) internal {
+        bidEscrow -= amount;
+        bool credited = !SafeTransferLib.trySafeTransferETH(to, amount, SafeTransferLib.GAS_STIPEND_NO_GRIEF);
+        if (credited) {
+            bidRefunds[to] += amount;
+            creditedRefunds += amount;
+        }
+        emit BidRefunded(to, amount, credited);
     }
 
     function _windDown() internal {
@@ -505,7 +692,7 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     function _finishIfDone() internal {
-        if (status != Status.WindingDown || _outstanding.length != 0) return;
+        if (status != Status.WindingDown || _outstanding.length != 0 || openAuctions != 0) return;
         status = Status.Idle;
         uint256 returned;
         if (autoReturn) {
@@ -516,9 +703,10 @@ contract Vault is ReentrancyGuardTransient {
         emit RunEnded(returned);
     }
 
+    /// @dev Credits untracked ETH to idle. Bid escrow and credited refunds are never absorbable.
     function _absorb() internal {
-        uint256 balance = address(this).balance;
-        if (balance > idle) idle = balance;
+        uint256 absorbable = address(this).balance - bidEscrow - creditedRefunds;
+        if (absorbable > idle) idle = absorbable;
     }
 
     function _payFees() internal {
