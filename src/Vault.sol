@@ -105,7 +105,8 @@ contract Vault is ReentrancyGuardTransient {
     uint256 public constant MAX_BOUNTY = 0.003 ether;
     uint256 public constant MAX_SYNC_BOUNTY = 0.03 ether;
     /// @notice Age of the oldest allocated pull a sync resolves at which its bounty reaches the max.
-    uint256 public constant SYNC_BOUNTY_RAMP = 30 minutes;
+    // SPEC: 20 minutes, so the max is reached before the miss-auction cutoff.
+    uint256 public constant SYNC_BOUNTY_RAMP = 20 minutes;
     // SPEC: a sync processes at most 8 FWA acquisitions at the head of FWA's sequence.
     uint256 public constant MAX_PROCESS = 8;
 
@@ -133,8 +134,6 @@ contract Vault is ReentrancyGuardTransient {
     address public immutable ROUTER;
     address public immutable REWARD_VAULT;
     address public immutable FEE_RECIPIENT;
-    address public immutable REWARDS;
-    address public immutable TOKEN;
 
     /// @notice Set once by `initialize` and never changed.
     address public OWNER;
@@ -192,6 +191,7 @@ contract Vault is ReentrancyGuardTransient {
     error BidTooLow();
     error AuctionEnded();
     error AuctionNotEnded();
+    error PriceAboveCap();
 
     event RunStarted(uint256 runStartValue, RunParams params);
     event RunWindingDown(WindDownReason reason);
@@ -231,8 +231,6 @@ contract Vault is ReentrancyGuardTransient {
         ROUTER = router;
         REWARD_VAULT = rewardVault;
         FEE_RECIPIENT = feeRecipient;
-        REWARDS = IFWA(fwa).rewards();
-        TOKEN = IFWA(fwa).token();
     }
 
     receive() external payable {}
@@ -307,8 +305,9 @@ contract Vault is ReentrancyGuardTransient {
 
     /// @notice Opens up to `count` pulls, fewer if a run limit or the drawdown floor allows fewer.
     ///         Ends the run instead when a stop condition holds.
-    ///         Anyone may call it unless `privateMode` is set; a paid caller gets gas and `bountyWei`
-    ///         when it opens pulls.
+    ///         Anyone may call it unless `privateMode` is set; a paid caller gets gas when it opens
+    ///         pulls or ends the run, and `bountyWei` only when it opens as many pulls as allowed or
+    ///         ends the run. A quote above `maxPullCostWei` ends the run only for the owner.
     /// @return requested Pulls opened by this call.
     function requestPulls(uint256 count) external nonReentrant returns (uint256 requested) {
         uint256 gasStart = gasleft();
@@ -322,6 +321,7 @@ contract Vault is ReentrancyGuardTransient {
         _absorb();
 
         RunParams memory p = run;
+        uint256 allowed;
         uint256 inFlight = _outstanding.length + _openAuctionIds.length;
         (bool limit, WindDownReason reason) = _runLimit(p, true);
         if (limit) {
@@ -331,13 +331,16 @@ contract Vault is ReentrancyGuardTransient {
             if (IFWAV2(FWA).isPurchaseBlackout()) revert PurchaseBlackout();
             (uint256 fee,, uint256 total) = FwaClientLib.quote(FWA);
             if (total == 0) revert NotPriced();
-            // SPEC: a quote above maxPullCostWei is "FWA config outside the run's bounds" and ends the run.
+            // SPEC: a quote above maxPullCostWei is "FWA config outside the run's bounds"; only the
+            // owner's call ends the run on it, anyone else's reverts.
             if (total > p.maxPullCostWei) {
+                if (!byOwner) revert PriceAboveCap();
                 _windDown(WindDownReason.PriceCap);
             } else {
-                requested = _min(_min(count, MAX_OUTSTANDING - inFlight), p.maxPulls - pullsRequested);
+                allowed = _min(_min(MAX_BATCH, MAX_OUTSTANDING - inFlight), p.maxPulls - pullsRequested);
                 // SPEC: the floor check prices each pull at its quote plus the pull fee it would owe.
-                requested = _min(requested, _affordable(total, total + fee * PULL_FEE_PPM / PPM, paid));
+                allowed = _min(allowed, _affordable(total, total + fee * PULL_FEE_PPM / PPM, paid));
+                requested = _min(count, allowed);
                 if (requested == 0) {
                     // The run ends on the floor only when nothing is in flight.
                     if (inFlight != 0) revert FloorReached();
@@ -349,8 +352,10 @@ contract Vault is ReentrancyGuardTransient {
         }
         // Ending a run is useful work (it returns the owner's ETH) and happens once per run, so it is
         // paid like a request. Pay before _finishIfDone, whose auto-return empties idle.
-        if (requested != 0 || status == Status.WindingDown) {
-            _reimburse(gasStart, REQUEST_GAS_CAP, false, bountyWei);
+        // SPEC: the bounty is paid only for a maximal call, so splitting a batch earns no extra bounty.
+        bool ending = status == Status.WindingDown;
+        if (requested != 0 || ending) {
+            _reimburse(gasStart, REQUEST_GAS_CAP, false, ending || requested == allowed ? bountyWei : 0);
         }
         _finishIfDone();
     }
@@ -359,8 +364,9 @@ contract Vault is ReentrancyGuardTransient {
     ///         owner, a miss auction, or sell back), records forced outcomes, and takes refund credit.
     ///         Auctions are finalized separately by `finalizeAuction`. First advances FWA's
     ///         acquisition sequence when a pull is still waiting in it.
-    ///         Permissionless; a paid caller gets gas and the sync bounty when it resolves or
-    ///         processes something.
+    ///         Permissionless; a paid caller gets gas when it resolves one of this vault's pulls or its
+    ///         processing moves one to a terminal FWA status, and the sync bounty only when no
+    ///         resolvable pull is left untried.
     function sync(uint256 maxCount) external nonReentrant returns (uint256 resolved) {
         uint256 gasStart = gasleft();
         _absorb();
@@ -378,6 +384,14 @@ contract Vault is ReentrancyGuardTransient {
                 ++i;
             }
         }
+        // SPEC: the bounty is paid only when the call swept every pull it could resolve.
+        bool swept = true;
+        for (uint256 j = i; j < _outstanding.length; ++j) {
+            if (_terminal(_outstanding[j])) {
+                swept = false;
+                break;
+            }
+        }
         if (FwaClientLib.refundCredit(FWA) != 0) FwaClientLib.withdrawRefund(FWA);
         _absorb();
         _payFees();
@@ -386,7 +400,7 @@ contract Vault is ReentrancyGuardTransient {
             if (limit) _windDown(reason);
         }
         // SPEC: the caller is paid before auto-return, so the sync that ends a run is paid too.
-        if (resolved != 0 || processed) _reimburse(gasStart, SYNC_GAS_CAP, true, _syncBounty(oldest));
+        if (resolved != 0 || processed) _reimburse(gasStart, SYNC_GAS_CAP, true, swept ? _syncBounty(oldest) : 0);
         _finishIfDone();
     }
 
@@ -557,7 +571,7 @@ contract Vault is ReentrancyGuardTransient {
     function collectRewards(uint256[] calldata epochs, bool accrued, uint256) external {
         if (msg.sender != REWARD_VAULT) revert Unauthorized();
         if (accrued) revert AccruedNotSupported();
-        FwaClientLib.claimEpochs(REWARDS, TOKEN, REWARD_VAULT, epochs);
+        FwaClientLib.claimEpochs(IFWA(FWA).rewards(), IFWA(FWA).token(), REWARD_VAULT, epochs);
     }
 
     /* ------------------------------------------------------------------ */
@@ -693,22 +707,32 @@ contract Vault is ReentrancyGuardTransient {
         emit PullsRequested(ids, spentPerPull);
     }
 
-    /// @dev Advances FWA's acquisition sequence when an outstanding pull is still in it. True when
-    ///      FWA processed at least one acquisition.
+    /// @dev Advances FWA's acquisition sequence when an outstanding pull is still in it. True only
+    ///      when that moved at least one of this vault's pulls to a terminal FWA status, so
+    ///      processing other purchasers' requests alone is not useful work.
     // SPEC: bounded by the outstanding count and MAX_PROCESS; a revert is ignored so sync still resolves.
     function _processHead() internal returns (bool) {
-        uint256 n = _outstanding.length;
+        uint256 n = _min(_outstanding.length, MAX_OUTSTANDING);
+        uint256[] memory open = new uint256[](n);
+        uint256 m;
         for (uint256 i; i < n; ++i) {
-            (,, uint8 acq) = FwaClientLib.status(FWA, _outstanding[i]);
-            if (acq != ACQ_FULFILLED && acq != ACQ_EXPIRED && acq != ACQ_REFUNDED) {
-                try IFWA(FWA).processAcquisitions(_min(n, MAX_PROCESS)) returns (uint256 processed) {
-                    return processed != 0;
-                } catch {
-                    return false;
-                }
-            }
+            if (!_terminal(_outstanding[i])) open[m++] = _outstanding[i];
+        }
+        if (m == 0) return false;
+        try IFWA(FWA).processAcquisitions(_min(n, MAX_PROCESS)) {}
+        catch {
+            return false;
+        }
+        for (uint256 i; i < m; ++i) {
+            if (_terminal(open[i])) return true;
         }
         return false;
+    }
+
+    /// @dev Fulfilled, Expired or Refunded in FWA.
+    function _terminal(uint256 requestId) internal view returns (bool) {
+        (,, uint8 acq) = FwaClientLib.status(FWA, requestId);
+        return acq == ACQ_FULFILLED || acq == ACQ_EXPIRED || acq == ACQ_REFUNDED;
     }
 
     /// @dev `bountyWei` rising linearly to `syncBountyMaxWei` as the oldest allocated pull resolved

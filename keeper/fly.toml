@@ -1,0 +1,28 @@
+# Keeper A. Deploy from keeper/: fly deploy -c fly.toml
+# Secrets (never in this file): fly secrets set -c fly.toml \
+#   RPC_URL=... SEND_RPC_URL=... KEEPER_PRIVATE_KEY=... FACTORY=0x... FROM_BLOCK=<deploy block>
+# Optional secret: ALERT_WEBHOOK_URL. One machine per app; each app has its own keeper key.
+
+app = "REPLACE-keeper-a"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  SYNC_AFTER_S = "900"
+  FINALIZE_AFTER_S = "600"
+  REQUEST_AFTER_S = "600"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[checks.health]
+  type = "http"
+  port = 8080
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "30s"

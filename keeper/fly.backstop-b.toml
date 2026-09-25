@@ -1,0 +1,29 @@
+# Keeper B, the second backstop. Deploy from keeper/: fly deploy -c fly.backstop-b.toml
+# Secrets (never in this file): fly secrets set -c fly.backstop-b.toml \
+#   RPC_URL=... SEND_RPC_URL=... KEEPER_PRIVATE_KEY=... FACTORY=0x... FROM_BLOCK=<deploy block>
+# Use a different keeper key and a different RPC provider from keeper A. Its thresholds sit after
+# A's so the two rarely race; the urgent thresholds are the same.
+
+app = "REPLACE-keeper-b"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  SYNC_AFTER_S = "1200"
+  FINALIZE_AFTER_S = "900"
+  REQUEST_AFTER_S = "900"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[checks.health]
+  type = "http"
+  port = 8080
+  path = "/health"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "30s"
