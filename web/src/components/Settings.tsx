@@ -4,9 +4,10 @@ import { vaultAbi } from '../abi/Vault';
 import { useTx } from '../hooks/useTx';
 import type { VaultState } from '../hooks/useVault';
 import type { VaultSettings } from '../lib/events';
-import { formatGwei } from '../lib/format';
+import { formatEth, formatGwei } from '../lib/format';
 import { diffKeepList, formatKeepList, isEmptyDiff, parseKeepList } from '../lib/keepList';
-import { checkGasCeiling, parseAddresses } from '../lib/runParams';
+import { checkBounties, checkGasCeiling, parseAddresses } from '../lib/runParams';
+import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX, MAX_BOUNTY, MAX_SYNC_BOUNTY } from '../lib/constants';
 import { Addr, Field, Section, TxStatus } from './ui';
 
 export function Settings({ vault, state, settings }: { vault: Address; state: VaultState; settings: VaultSettings }) {
@@ -15,8 +16,10 @@ export function Settings({ vault, state, settings }: { vault: Address; state: Va
       <p className="muted small">These apply right away, even mid-run. Keep list changes only affect reveals after the change.</p>
       <AutoReturn vault={vault} enabled={state.autoReturn} />
       <GasCeiling vault={vault} current={state.gasCeiling} />
+      <PrivateMode vault={vault} enabled={state.privateMode} />
+      <Bounties vault={vault} bounty={state.bountyWei} syncMax={state.syncBountyMaxWei} />
       <KeepListEditor vault={vault} settings={settings} />
-      <Keepers vault={vault} keepers={settings.keepers} />
+      <Keepers vault={vault} keepers={settings.keepers} privateMode={state.privateMode} />
     </Section>
   );
 }
@@ -61,6 +64,80 @@ function GasCeiling({ vault, current }: { vault: Address; current: bigint }) {
           Save
         </button>
       </div>
+      <TxStatus state={tx.state} />
+    </div>
+  );
+}
+
+function PrivateMode({ vault, enabled }: { vault: Address; enabled: boolean }) {
+  const tx = useTx();
+  return (
+    <div className="subsection">
+      <h3>Private mode</h3>
+      <p className="small">
+        {enabled
+          ? 'On: only you and approved keepers can request pulls, and only approved keepers are paid. Anyone can still sync and finalize auctions.'
+          : 'Off: anyone can request pulls, sync and finalize auctions within your run limits, paid gas plus the bounty from the vault.'}
+      </p>
+      <button
+        className="btn-small"
+        disabled={tx.busy}
+        onClick={() => tx.send('Private mode', { address: vault, abi: vaultAbi, functionName: 'setPrivateMode', args: [!enabled] })}
+      >
+        Turn {enabled ? 'off' : 'on'}
+      </button>
+      <TxStatus state={tx.state} />
+    </div>
+  );
+}
+
+function Bounties({ vault, bounty, syncMax }: { vault: Address; bounty: bigint; syncMax: bigint }) {
+  const tx = useTx();
+  const [bountyText, setBountyText] = useState('');
+  const [syncText, setSyncText] = useState('');
+  const edited = bountyText !== '' || syncText !== '';
+  const check = checkBounties(bountyText || formatEth(bounty, 18), syncText || formatEth(syncMax, 18));
+  return (
+    <div className="subsection">
+      <h3>Bounties</h3>
+      <p className="small">
+        Paid from idle ETH on top of gas to whoever does the work. Pull requests and auction finalizes pay {formatEth(bounty, 5)} ETH. A sync
+        pays from that up to {formatEth(syncMax, 5)} ETH as the oldest pull it settles ages to 30 minutes, so a late sync pays more.
+      </p>
+      <div className="grid">
+        <Field
+          label="Pull and finalize bounty (ETH)"
+          hint={`${formatEth(DEFAULT_BOUNTY)} to ${formatEth(MAX_BOUNTY)}`}
+          error={edited ? check.errors.bounty : undefined}
+        >
+          <input inputMode="decimal" value={bountyText} placeholder={formatEth(bounty, 6)} onChange={(e) => setBountyText(e.target.value)} />
+        </Field>
+        <Field
+          label="Sync bounty max (ETH)"
+          hint={`${formatEth(DEFAULT_SYNC_BOUNTY_MAX)} to ${formatEth(MAX_SYNC_BOUNTY)}, at least the bounty`}
+          error={edited ? check.errors.syncMax : undefined}
+        >
+          <input inputMode="decimal" value={syncText} placeholder={formatEth(syncMax, 6)} onChange={(e) => setSyncText(e.target.value)} />
+        </Field>
+      </div>
+      <button
+        className="btn-small"
+        disabled={tx.busy || !edited || check.bounty === null}
+        onClick={async () => {
+          const ok = await tx.send('Bounties', {
+            address: vault,
+            abi: vaultAbi,
+            functionName: 'setBounties',
+            args: [check.bounty!, check.syncMax!],
+          });
+          if (ok) {
+            setBountyText('');
+            setSyncText('');
+          }
+        }}
+      >
+        Save
+      </button>
       <TxStatus state={tx.state} />
     </div>
   );
@@ -139,15 +216,20 @@ function KeepListEditor({ vault, settings }: { vault: Address; settings: VaultSe
   );
 }
 
-function Keepers({ vault, keepers }: { vault: Address; keepers: Address[] }) {
+function Keepers({ vault, keepers, privateMode }: { vault: Address; keepers: Address[]; privateMode: boolean }) {
   const tx = useTx();
   const [text, setText] = useState('');
   const parsed = parseAddresses(text);
   return (
     <div className="subsection">
       <h3>Keepers</h3>
-      <p className="small">Approved keepers can request pulls with vault ETH, within your run limits and gas ceiling.</p>
-      {keepers.length === 0 ? <p className="small muted">None. Only you can request pulls.</p> : null}
+      <p className="small">
+        In private mode, approved keepers are the only callers who can request pulls with vault ETH (within your run limits and gas ceiling) and
+        the only ones paid. In public mode the list has no effect.
+      </p>
+      {keepers.length === 0 ? (
+        <p className="small muted">{privateMode ? 'None. Only you can request pulls.' : 'None.'}</p>
+      ) : null}
       <ul className="plain">
         {keepers.map((k) => (
           <li key={k} className="row">

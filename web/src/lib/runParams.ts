@@ -1,6 +1,6 @@
 import { isAddress, getAddress, type Address } from 'viem';
-import { MAX_GAS_CEILING } from './constants';
-import { parseEthInput, parseGweiInput } from './format';
+import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX, MAX_BOUNTY, MAX_GAS_CEILING, MAX_SYNC_BOUNTY } from './constants';
+import { formatEth, parseEthInput, parseGweiInput } from './format';
 
 export interface RunForm {
   amountEth: string;
@@ -90,6 +90,28 @@ export function checkGasCeiling(input: string): { wei: bigint | null; error?: st
   if (wei === null || wei === 0n) return { wei: null, error: 'Enter a gas ceiling above 0 gwei.' };
   if (wei > MAX_GAS_CEILING) return { wei: null, error: 'Gas ceiling is at most 100 gwei.' };
   return { wei };
+}
+
+/**
+ * Bounties in ETH text, checked like `setBounties`: each at or above its default, the pull and
+ * finalize bounty at most 0.003 ETH, the sync max at most 0.03 ETH and at least the bounty.
+ */
+export function checkBounties(
+  bountyText: string,
+  syncMaxText: string,
+): { bounty: bigint | null; syncMax: bigint | null; errors: { bounty?: string; syncMax?: string } } {
+  const errors: { bounty?: string; syncMax?: string } = {};
+  const bounty = parseEthInput(bountyText);
+  const syncMax = parseEthInput(syncMaxText);
+  if (bounty === null) errors.bounty = 'Enter an ETH amount.';
+  else if (bounty < DEFAULT_BOUNTY) errors.bounty = `At least ${formatEth(DEFAULT_BOUNTY)} ETH.`;
+  else if (bounty > MAX_BOUNTY) errors.bounty = `At most ${formatEth(MAX_BOUNTY)} ETH.`;
+  if (syncMax === null) errors.syncMax = 'Enter an ETH amount.';
+  else if (syncMax < DEFAULT_SYNC_BOUNTY_MAX) errors.syncMax = `At least ${formatEth(DEFAULT_SYNC_BOUNTY_MAX)} ETH.`;
+  else if (syncMax > MAX_SYNC_BOUNTY) errors.syncMax = `At most ${formatEth(MAX_SYNC_BOUNTY)} ETH.`;
+  else if (bounty !== null && syncMax < bounty) errors.syncMax = 'At least the pull and finalize bounty.';
+  if (errors.bounty || errors.syncMax) return { bounty: null, syncMax: null, errors };
+  return { bounty, syncMax, errors };
 }
 
 /** Parses keeper addresses separated by spaces, commas or new lines. */

@@ -1,12 +1,12 @@
-// Vault and auction discovery from logs: paged from FROM_BLOCK, then incremental. The chain stays the
-// source of truth; the optional cursor file only saves the rescan on restart.
+// Vault discovery from `VaultCreated` logs: paged from FROM_BLOCK, then incremental. Everything else
+// (outstanding pulls, open auctions) is read from the vaults' views each tick. The optional cursor file
+// only saves the rescan on restart.
 
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { errInfo } from './log.mjs';
 
 /** Re-scan this many blocks behind the head each pass so a shallow reorg cannot hide a log. */
 const OVERLAP = 5n;
-const ADDRESS_CHUNK = 200;
 
 export class Discovery {
   constructor({ adapter, log, factory, fromBlock, chunk, cursorFile = null, chainId = 0 }) {
@@ -22,8 +22,6 @@ export class Discovery {
     this.next = fromBlock;
     /** @type {Set<string>} lowercased vault addresses */
     this.vaults = new Set();
-    /** @type {Map<string, Set<bigint>>} vault -> auction request ids that may still be open */
-    this.auctions = new Map();
     this._load();
   }
 
@@ -34,7 +32,6 @@ export class Discovery {
       if (c.factory !== this.factory || c.chainId !== this.chainId) return;
       if (BigInt(c.next) > this.next) this.next = BigInt(c.next);
       for (const v of c.vaults) this.vaults.add(v);
-      for (const [v, ids] of Object.entries(c.auctions)) this.auctions.set(v, new Set(ids.map(BigInt)));
       this.log.info('cursor loaded', { next: this.next, vaults: this.vaults.size });
     } catch (e) {
       if (e?.code !== 'ENOENT') this.log.warn('cursor unreadable, rescanning', { err: errInfo(e) });
@@ -48,7 +45,6 @@ export class Discovery {
       factory: this.factory,
       next: this.next.toString(),
       vaults: [...this.vaults],
-      auctions: Object.fromEntries([...this.auctions].map(([v, ids]) => [v, [...ids].map(String)])),
     };
     try {
       writeFileSync(this.cursorFile + '.tmp', JSON.stringify(c));
@@ -92,26 +88,5 @@ export class Discovery {
         this.log.info('vault discovered', { vault: v, block: l.blockNumber });
       }
     }
-    const all = [...this.vaults];
-    for (let i = 0; i < all.length; i += ADDRESS_CHUNK) {
-      for (const l of await this.adapter.getAuctionStarted(all.slice(i, i + ADDRESS_CHUNK), from, to)) {
-        const v = l.vault.toLowerCase();
-        if (!this.vaults.has(v)) continue;
-        if (!this.auctions.has(v)) this.auctions.set(v, new Set());
-        this.auctions.get(v).add(BigInt(l.requestId));
-      }
-    }
-  }
-
-  auctionIds(vault) {
-    return [...(this.auctions.get(vault) ?? [])];
-  }
-
-  /** Forgets auctions no longer open (the chain said so). */
-  forgetAuction(vault, requestId) {
-    const s = this.auctions.get(vault);
-    if (!s) return;
-    s.delete(BigInt(requestId));
-    if (s.size === 0) this.auctions.delete(vault);
   }
 }

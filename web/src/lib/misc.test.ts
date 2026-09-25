@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseEther } from 'viem';
 import { explainRevert } from './errors';
 import { planRanges } from './ranges';
-import { checkGasCeiling, checkRunForm, parseAddresses, unixToLocalInput } from './runParams';
+import { checkBounties, checkGasCeiling, checkRunForm, parseAddresses, unixToLocalInput } from './runParams';
+import { windDownReasonLabel } from './format';
 
 describe('planRanges', () => {
   it('splits inclusive ranges', () => {
@@ -56,6 +57,34 @@ describe('checkGasCeiling', () => {
     expect(checkGasCeiling('100').wei).toBe(100_000_000_000n);
     expect(checkGasCeiling('0').error).toBeTruthy();
     expect(checkGasCeiling('100.1').error).toBeTruthy();
+  });
+});
+
+describe('checkBounties', () => {
+  it('accepts the defaults and the maxima', () => {
+    expect(checkBounties('0.0003', '0.003')).toMatchObject({ bounty: parseEther('0.0003'), syncMax: parseEther('0.003') });
+    expect(checkBounties('0.003', '0.03')).toMatchObject({ bounty: parseEther('0.003'), syncMax: parseEther('0.03') });
+  });
+  it('enforces the setBounties bounds', () => {
+    expect(checkBounties('0.0002', '0.003').errors.bounty).toBeTruthy();
+    expect(checkBounties('0.0031', '0.03').errors.bounty).toBeTruthy();
+    expect(checkBounties('0.0003', '0.002').errors.syncMax).toBeTruthy();
+    expect(checkBounties('0.0003', '0.031').errors.syncMax).toBeTruthy();
+    expect(checkBounties('x', '0.003').bounty).toBeNull();
+  });
+});
+
+describe('windDownReasonLabel', () => {
+  it('names every WindDownReason', () => {
+    expect([0, 1, 2, 3, 4, 5].map(windDownReasonLabel)).toEqual([
+      'stopped by the owner',
+      'the drawdown floor is reached',
+      'the run deadline passed',
+      'the keep target is reached',
+      'the pull cap is reached',
+      'the FWA pull price is above the max pull cost',
+    ]);
+    expect(windDownReasonLabel(9)).toBe('unknown reason (9)');
   });
 });
 

@@ -5,7 +5,7 @@ import { vaultAbi } from '../abi/Vault';
 import { useOpenAuctions, type OpenAuction } from '../hooks/useAuctions';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
-import { bidExtends, minNextBid, secondsLeft } from '../lib/auction';
+import { bidExtends, secondsLeft } from '../lib/auction';
 import { formatDuration, formatEth, parseEthInput, shortId } from '../lib/format';
 import { Addr, Eth, Section, TxStatus } from './ui';
 
@@ -43,7 +43,7 @@ export function Auctions() {
 
 function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address }) {
   const tx = useTx();
-  const min = minNextBid(a.backstop, a.highBid);
+  const min = a.minNextBid;
   const [text, setText] = useState('');
   const value = text ? parseEthInput(text) : min;
   const left = secondsLeft(a.deadline, now);
@@ -55,8 +55,8 @@ function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address
     <article className="auction">
       <div className="auction-head">
         <div>
-          {a.collection ? <Addr address={a.collection} /> : <span className="muted">Listing {shortId(a.listingId)}</span>}
-          {a.tokenId !== undefined ? <span className="mono"> #{a.tokenId.toString()}</span> : null}
+          <Addr address={a.collection} />
+          <span className="mono"> #{a.tokenId.toString()}</span>
         </div>
         <span className={`pill ${ended ? 'pill-idle' : left < 300 ? 'pill-warn' : 'pill-good'}`}>{ended ? 'Ended' : formatDuration(left)}</span>
       </div>
@@ -81,12 +81,12 @@ function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address
         </dd>
         <dt>Vault</dt>
         <dd>
-          <Addr address={a.vault} /> request {shortId(a.requestId)}
+          <Addr address={a.vault} /> request {shortId(a.requestId)}, listing {shortId(a.listingId)}
         </dd>
       </dl>
       {ended ? (
         <>
-          <p className="small">Bidding closed. Anyone can finalize: the winner gets the NFT, or it sells back.</p>
+          <p className="small">Bidding closed. Anyone can finalize and is paid gas plus a bounty: the winner gets the NFT, or it sells back.</p>
           <button
             className="btn-small"
             disabled={!me || tx.busy}

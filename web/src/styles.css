@@ -213,6 +213,18 @@ input[type='range'] {
   padding: 0;
   accent-color: var(--accent);
 }
+label.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+label.check input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+  accent-color: var(--accent);
+}
 input:focus,
 textarea:focus {
   outline: 2px solid var(--accent);

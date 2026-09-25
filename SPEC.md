@@ -95,7 +95,8 @@ run's limits (floor, max pull cost, max pulls, deadline, outstanding cap).
   never paid.
 - A paid call is reimbursed from idle ETH at `min(basefee + 2 gwei, tx.gasprice, ceiling)`, gas
   capped per call, plus its bounty, never more than idle ETH (gas first, then bounty). It is paid
-  only when it does useful work: `requestPulls` opens a pull, `sync` resolves a pull or processes an
+  only when it does useful work: `requestPulls` opens a pull or ends the run (once per run; this
+  bounty is the only cost a 0% drawdown run can incur), `sync` resolves a pull or processes an
   FWA acquisition, `finalizeAuction` finalizes. Payment comes before auto-return, so the call that
   ends a run is paid.
 - Sync and auction finalizing protect pulls already bought, so their reimbursement ignores the

@@ -347,8 +347,12 @@ contract Vault is ReentrancyGuardTransient {
                 }
             }
         }
+        // Ending a run is useful work (it returns the owner's ETH) and happens once per run, so it is
+        // paid like a request. Pay before _finishIfDone, whose auto-return empties idle.
+        if (requested != 0 || status == Status.WindingDown) {
+            _reimburse(gasStart, REQUEST_GAS_CAP, false, bountyWei);
+        }
         _finishIfDone();
-        if (requested != 0) _reimburse(gasStart, REQUEST_GAS_CAP, false, bountyWei);
     }
 
     /// @notice Resolves up to `maxCount` outstanding pulls: routes every reveal (keep list to the

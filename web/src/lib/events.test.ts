@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { encodeAbiParameters, encodeEventTopics, parseEther, type Address, type Hex } from 'viem';
 import { vaultAbi } from '../abi/Vault';
-import { decodeVaultLogs, forcedNfts, openAuctionsFromEvents, replaySettings, toFeed } from './events';
+import { decodeVaultLogs, forcedNfts, lastWindDownReason, replaySettings, toFeed } from './events';
 
 const VAULT = '0x1111111111111111111111111111111111111111' as Address;
 const OTHER = '0x2222222222222222222222222222222222222222' as Address;
@@ -75,10 +75,32 @@ describe('toFeed', () => {
     expect(feed[0].detail).toContain('1.2 ETH');
     expect(feed.every((f) => !/[\u2013\u2014]/.test(f.title + f.detail))).toBe(true);
   });
+  it('shows bounties, the wind-down reason and the new settings', () => {
+    const feed = toFeed(
+      decodeVaultLogs([
+        log('BountyPaid', { caller: K, amount: parseEther('0.0003') }),
+        log('RunWindingDown', { reason: 1 }),
+        log('PrivateModeSet', { enabled: true }),
+        log('BountiesSet', { bountyWei: parseEther('0.001'), syncBountyMaxWei: parseEther('0.01') }),
+      ]),
+    );
+    expect(feed.map((f) => f.title)).toEqual(['Bounties set', 'Private mode on', 'Run winding down', 'Bounty paid']);
+    expect(feed[0].detail).toBe('Pull and finalize 0.001 ETH, sync up to 0.01 ETH');
+    expect(feed[2].detail).toBe('The drawdown floor is reached. No new pulls; open items are resolving.');
+    expect(feed[3].detail).toBe('0.0003 ETH to 0x4444...4444');
+    expect(feed.every((f) => !/[\u2013\u2014]/.test(f.title + f.detail))).toBe(true);
+  });
+});
+
+describe('lastWindDownReason', () => {
+  it('takes the latest RunWindingDown', () => {
+    expect(lastWindDownReason([])).toBeNull();
+    expect(lastWindDownReason(decodeVaultLogs([log('RunWindingDown', { reason: 2 }), log('RunWindingDown', { reason: 5 })]))).toBe(5);
+  });
 });
 
 describe('replaySettings', () => {
-  it('replays keep list, keepers and fees', () => {
+  it('replays keep list and keepers', () => {
     const s = replaySettings(
       decodeVaultLogs([
         log('KeepCollectionSet', { collection: C, keep: true }),
@@ -88,29 +110,15 @@ describe('replaySettings', () => {
         log('KeeperSet', { keeper: K, approved: true }),
         log('KeeperSet', { keeper: OTHER, approved: true }),
         log('KeeperSet', { keeper: OTHER, approved: false }),
-        log('FeePaid', { amount: 10n }),
-        log('FeePaid', { amount: 15n }),
       ]),
     );
     expect(s.collections).toEqual([C]);
     expect(s.tokens).toEqual([{ collection: C, tokenId: 6n }]);
     expect(s.keepers).toEqual([K]);
-    expect(s.feesPaid).toBe(25n);
   });
 });
 
-describe('auction and forced tracking', () => {
-  it('keeps only unfinalized auctions per vault', () => {
-    const open = openAuctionsFromEvents(
-      decodeVaultLogs([
-        log('AuctionStarted', { requestId: 1n, listingId: 11n, backstop: 1n, deadline: 1n, hardDeadline: 2n }),
-        log('AuctionStarted', { requestId: 1n, listingId: 12n, backstop: 1n, deadline: 1n, hardDeadline: 2n }, OTHER),
-        log('AuctionStarted', { requestId: 2n, listingId: 13n, backstop: 1n, deadline: 1n, hardDeadline: 2n }),
-        log('AuctionFinalized', { requestId: 1n, winner: K, amount: 3n }),
-      ]),
-    );
-    expect(open.map((a) => `${a.vault}:${a.requestId}:${a.listingId}`)).toEqual([`${OTHER}:1:12`, `${VAULT}:2:13`]);
-  });
+describe('forced tracking', () => {
   it('lists forced NFT outcomes only', () => {
     const f = forcedNfts(
       decodeVaultLogs([

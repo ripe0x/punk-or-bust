@@ -5,7 +5,16 @@ import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { useQuote, useVaultEvents, useVaultState, type VaultState } from '../hooks/useVault';
 import { affordablePulls } from '../lib/floor';
-import { formatBps, formatDuration, formatEth, formatGwei, formatTimestamp, parseEthInput, vaultStatusLabel } from '../lib/format';
+import {
+  formatBps,
+  formatDuration,
+  formatEth,
+  formatGwei,
+  formatTimestamp,
+  parseEthInput,
+  vaultStatusLabel,
+  windDownReasonLabel,
+} from '../lib/format';
 import { checkRunForm, type RunForm } from '../lib/runParams';
 import { Feed } from './Feed';
 import { FloorBar } from './FloorBar';
@@ -14,17 +23,7 @@ import { Settings } from './Settings';
 import { Sweep } from './Sweep';
 import { Addr, Eth, Field, Section, Stat, TxStatus } from './ui';
 
-export function Dashboard({
-  vault,
-  viewer,
-  pendingCeiling,
-  onCeilingDone,
-}: {
-  vault: Address;
-  viewer?: Address;
-  pendingCeiling?: bigint | null;
-  onCeilingDone?: () => void;
-}) {
+export function Dashboard({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const { state, loading, error } = useVaultState(vault);
   const ev = useVaultEvents(vault);
 
@@ -35,10 +34,7 @@ export function Dashboard({
 
   return (
     <>
-      <Overview vault={vault} state={state} feesPaid={ev.settings.feesPaid} isOwner={isOwner} />
-      {isOwner && pendingCeiling != null && pendingCeiling !== state.gasCeiling ? (
-        <PendingCeiling vault={vault} ceiling={pendingCeiling} onDone={() => onCeilingDone?.()} />
-      ) : null}
+      <Overview vault={vault} state={state} windDownReason={ev.windDownReason} isOwner={isOwner} />
       {isOwner ? <OwnerActions vault={vault} state={state} /> : null}
       {!state.rewardsRegistered ? <RegisterRewards vault={vault} /> : null}
       {isOwner ? <Settings vault={vault} state={state} settings={ev.settings} /> : null}
@@ -48,7 +44,17 @@ export function Dashboard({
   );
 }
 
-function Overview({ vault, state, feesPaid, isOwner }: { vault: Address; state: VaultState; feesPaid: bigint; isOwner: boolean }) {
+function Overview({
+  vault,
+  state,
+  windDownReason,
+  isOwner,
+}: {
+  vault: Address;
+  state: VaultState;
+  windDownReason: number | null;
+  isOwner: boolean;
+}) {
   const now = useNow(1000);
   const quote = useQuote(state.fwa);
   const s = state;
@@ -93,7 +99,7 @@ function Overview({ vault, state, feesPaid, isOwner }: { vault: Address; state: 
           {s.keeps.toString()}
         </Stat>
         <Stat label="Fees paid" hint={s.feeOwed > 0n ? `${formatEth(s.feeOwed, 6)} ETH owed` : undefined}>
-          <span className="num">{formatEth(feesPaid, 6)} ETH</span>
+          <span className="num">{formatEth(s.feesPaid, 6)} ETH</span>
         </Stat>
         {running ? (
           <>
@@ -107,12 +113,23 @@ function Overview({ vault, state, feesPaid, isOwner }: { vault: Address; state: 
         ) : null}
         <Stat label="Gas ceiling">{formatGwei(s.gasCeiling)} gwei</Stat>
         <Stat label="Auto-return">{s.autoReturn ? 'On' : 'Off'}</Stat>
+        <Stat label="Private mode" hint={s.privateMode ? 'Only approved keepers pull' : 'Anyone can pull'}>
+          {s.privateMode ? 'On' : 'Off'}
+        </Stat>
+        <Stat label="Bounty" hint={`Sync up to ${formatEth(s.syncBountyMaxWei, 5)} ETH`}>
+          <span className="num">{formatEth(s.bountyWei, 5)} ETH</span>
+        </Stat>
       </div>
       {canPull !== undefined ? (
         <p className="small muted">About {canPull.toString()} more pulls fit above the floor at the current FWA price.</p>
       ) : null}
       {s.status === 1 && s.run.maxDrawdownBps === 0n ? <p className="warn">Max drawdown is 0%, so this run never pulls.</p> : null}
-      {s.status === 2 ? <p className="small">Winding down: no new pulls. The run ends once in-flight pulls and auctions resolve.</p> : null}
+      {s.status === 2 ? (
+        <p className="small">
+          Winding down{windDownReason !== null ? `: ${windDownReasonLabel(windDownReason)}` : ''}. No new pulls; the run ends once in-flight
+          pulls and auctions resolve.
+        </p>
+      ) : null}
     </Section>
   );
 }
@@ -203,31 +220,6 @@ function RegisterRewards({ vault }: { vault: Address }) {
       <button className="btn-small" disabled={tx.busy} onClick={() => tx.send('Register rewards', { address: vault, abi: vaultAbi, functionName: 'registerRewards' })}>
         Register rewards
       </button>
-      <TxStatus state={tx.state} />
-    </Section>
-  );
-}
-
-function PendingCeiling({ vault, ceiling, onDone }: { vault: Address; ceiling: bigint; onDone: () => void }) {
-  const tx = useTx();
-  return (
-    <Section title="One more step">
-      <p>
-        Your vault is live. New vaults start at a 1.2 gwei gas ceiling. Send one more transaction to set it to {formatGwei(ceiling)} gwei.
-      </p>
-      <div className="row">
-        <button
-          disabled={tx.busy}
-          onClick={async () => {
-            if (await tx.send('Set gas ceiling', { address: vault, abi: vaultAbi, functionName: 'setGasCeiling', args: [ceiling] })) onDone();
-          }}
-        >
-          Set gas ceiling
-        </button>
-        <button className="btn-ghost" onClick={onDone}>
-          Skip
-        </button>
-      </div>
       <TxStatus state={tx.state} />
     </Section>
   );

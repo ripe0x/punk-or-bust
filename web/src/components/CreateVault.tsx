@@ -12,14 +12,14 @@ import { formatGwei } from '../lib/format';
 import { RunFields, defaultRunForm } from './RunFields';
 import { Addr, Field, Section, TxStatus } from './ui';
 
-/** `onCreated` gets the gas ceiling still to set, or null when the default was kept. */
-export function CreateVault({ predicted, onCreated }: { predicted?: Address; onCreated: (pendingCeiling: bigint | null) => void }) {
+export function CreateVault({ predicted, onCreated }: { predicted?: Address; onCreated: () => void }) {
   const now = useNow(10_000);
   const quote = useQuote(useFactoryFwa());
   const [form, setForm] = useState<RunForm>(() => defaultRunForm(Date.now() / 1000));
   const [keepText, setKeepText] = useState('');
   const [keeperText, setKeeperText] = useState(defaultKeeper ?? '');
   const [ceiling, setCeiling] = useState(formatGwei(DEFAULT_GAS_CEILING));
+  const [autoReturn, setAutoReturn] = useState(true);
   const [tried, setTried] = useState(false);
   const tx = useTx();
 
@@ -36,21 +36,18 @@ export function CreateVault({ predicted, onCreated }: { predicted?: Address; onC
       address: factoryAddress,
       abi: factoryAbi,
       functionName: 'createVault',
-      args: [keep.collections, keep.tokens, keepers.addresses, run.params!],
+      args: [keep.collections, keep.tokens, keepers.addresses, run.params!, gas.wei!, autoReturn],
       value: run.value!,
     });
-    if (!ok) return;
-    // createVault always starts at the default ceiling; a different one is a second transaction,
-    // offered on the dashboard.
-    onCreated(gas.wei !== DEFAULT_GAS_CEILING ? gas.wei : null);
+    if (ok) onCreated();
   }
 
   const errs = tried ? run.errors : {};
   return (
     <Section title="Create your vault">
       <p className="muted">
-        Fund a vault, set a drawdown limit and a keep list. A keeper runs FWA pulls for you. Kept NFTs go to your wallet,
-        the rest sell back or go to a short auction, and the ETH recycles into more pulls.
+        Fund a vault, set a drawdown limit and a keep list. Keepers run FWA pulls for you, paid their gas plus a small bounty from
+        the vault. Kept NFTs go to your wallet, the rest sell back or go to a short auction, and the ETH recycles into more pulls.
       </p>
       {predicted ? (
         <p>
@@ -75,13 +72,22 @@ export function CreateVault({ predicted, onCreated }: { predicted?: Address; onC
       ) : null}
 
       <div className="grid">
-        <Field label="Approved keeper" hint="Can spend vault ETH on pulls, within your limits. Leave empty to pull yourself." error={keepers.errors[0]}>
+        <Field
+          label="Approved keeper"
+          hint="Optional. Anyone can run your pulls within your limits; in private mode only approved keepers can."
+          error={keepers.errors[0]}
+        >
           <input spellCheck={false} value={keeperText} onChange={(e) => setKeeperText(e.target.value)} placeholder="0x..." />
         </Field>
-        <Field label="Gas ceiling (gwei)" hint="Keepers do not pull above this gas price. 0 to 100." error={gas.error}>
+        <Field label="Gas ceiling (gwei)" hint="Keepers do not pull above this gas price. Above 0, at most 100." error={gas.error}>
           <input inputMode="decimal" value={ceiling} onChange={(e) => setCeiling(e.target.value)} />
         </Field>
       </div>
+
+      <label className="check">
+        <input type="checkbox" checked={autoReturn} onChange={(e) => setAutoReturn(e.target.checked)} /> Auto-return: send idle ETH back to my
+        wallet when the run ends
+      </label>
 
       <div className="row">
         <button onClick={create} disabled={tx.busy || !factoryAddress}>

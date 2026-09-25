@@ -65,7 +65,6 @@ export function App() {
 function MyVault() {
   const { address, isConnected } = useAccount();
   const { vault, predicted, loading, refetch } = useOwnerVault(address);
-  const [pendingCeiling, setPendingCeiling] = useState<bigint | null>(null);
   if (!isConnected || !address) {
     return (
       <Section title="Your vault">
@@ -75,15 +74,12 @@ function MyVault() {
   }
   if (loading) return <p className="muted">Looking up your vault.</p>;
   if (vault) {
-    return <Dashboard vault={vault} viewer={address} pendingCeiling={pendingCeiling} onCeilingDone={() => setPendingCeiling(null)} />;
+    return <Dashboard vault={vault} viewer={address} />;
   }
   return (
     <CreateVault
       predicted={predicted}
-      onCreated={(ceiling) => {
-        setPendingCeiling(ceiling);
-        void refetch();
-      }}
+      onCreated={() => void refetch()}
     />
   );
 }

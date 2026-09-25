@@ -5,7 +5,7 @@ import { factoryAbi } from '../abi/VaultFactory';
 import { vaultAbi } from '../abi/Vault';
 import { fwaAbi } from '../abi/IFWA';
 import { factoryAddress } from '../config';
-import { decodeVaultLogs, replaySettings, toFeed, type VaultEvent } from '../lib/events';
+import { decodeVaultLogs, lastWindDownReason, replaySettings, toFeed, type VaultEvent } from '../lib/events';
 import type { RunParams } from '../lib/runParams';
 import { useLogScan } from './useLogScan';
 import { VAULT_CREATED, VAULT_EVENTS } from './abiEvents';
@@ -48,7 +48,11 @@ export interface VaultState {
   autoReturn: boolean;
   rewardsRegistered: boolean;
   gasCeiling: bigint;
+  privateMode: boolean;
+  bountyWei: bigint;
+  syncBountyMaxWei: bigint;
   feeOwed: bigint;
+  feesPaid: bigint;
   bidEscrow: bigint;
   keptValue: bigint;
   fwa: Address;
@@ -69,7 +73,11 @@ const FIELDS = [
   'autoReturn',
   'rewardsRegistered',
   'gasCeiling',
+  'privateMode',
+  'bountyWei',
+  'syncBountyMaxWei',
   'feeOwed',
+  'feesPaid',
   'bidEscrow',
   'keptValue',
   'FWA',
@@ -104,7 +112,11 @@ export function useVaultState(vault: Address | undefined) {
       autoReturn: v.autoReturn as boolean,
       rewardsRegistered: v.rewardsRegistered as boolean,
       gasCeiling: v.gasCeiling as bigint,
+      privateMode: v.privateMode as boolean,
+      bountyWei: v.bountyWei as bigint,
+      syncBountyMaxWei: v.syncBountyMaxWei as bigint,
       feeOwed: v.feeOwed as bigint,
+      feesPaid: v.feesPaid as bigint,
       bidEscrow: v.bidEscrow as bigint,
       keptValue: v.keptValue as bigint,
       fwa: v.FWA as Address,
@@ -115,7 +127,7 @@ export function useVaultState(vault: Address | undefined) {
   return { state, loading: reads.isLoading, error: reads.error?.message ?? failed?.error?.message };
 }
 
-/** Decoded events of one vault, plus what they imply (feed, keep list, keepers, fees paid). */
+/** Decoded events of one vault, plus what they imply (feed, keep list, keepers, wind-down reason). */
 export function useVaultEvents(vault: Address | undefined) {
   const scan = useLogScan(vault, VAULT_EVENTS);
   return useMemo(() => {
@@ -124,6 +136,7 @@ export function useVaultEvents(vault: Address | undefined) {
       events,
       feed: toFeed(events),
       settings: replaySettings(events),
+      windDownReason: lastWindDownReason(events),
       loading: scan.loading,
       error: scan.error,
     };

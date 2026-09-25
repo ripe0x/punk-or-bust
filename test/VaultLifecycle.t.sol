@@ -168,7 +168,8 @@ contract VaultLifecycleTest is VaultTestBase {
         vm.prank(keeper);
         assertEq(vault.requestPulls(5), 0, "no pull");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run ended");
-        assertEq(owner.balance, 3 ether, "all returned");
+        assertEq(owner.balance, 3 ether - vault.bountyWei(), "all returned less the run-ending bounty");
+        assertEq(keeper.balance, vault.bountyWei(), "caller paid the bounty for ending the run");
     }
 
     function testFullDrawdownPullsUntilEmpty() public {
@@ -186,7 +187,7 @@ contract VaultLifecycleTest is VaultTestBase {
         vm.prank(keeper);
         assertEq(vault.requestPulls(1), 0, "no pull");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended");
-        assertEq(owner.balance, left, "remainder returned");
+        assertEq(owner.balance, left - vault.bountyWei(), "remainder returned less the run-ending bounty");
     }
 
     function testFloorClampsAndWaitsForInFlight() public {

@@ -35,11 +35,14 @@ export function loadConfig(env = process.env) {
   if (!privateKey || !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) throw new Error('KEEPER_PRIVATE_KEY must be 0x plus 64 hex chars');
   const factory = env.FACTORY;
   if (!factory || !/^0x[0-9a-fA-F]{40}$/.test(factory)) throw new Error('FACTORY must be an address');
+  const sendRpcUrl = env.SEND_RPC_URL || null;
+  if (sendRpcUrl && !/^https?:\/\//.test(sendRpcUrl)) throw new Error('SEND_RPC_URL must be http(s)');
   const webhook = env.ALERT_WEBHOOK_URL || null;
   if (webhook && !/^https?:\/\//.test(webhook)) throw new Error('ALERT_WEBHOOK_URL must be http(s)');
 
   return {
     rpcUrl,
+    sendRpcUrl,
     privateKey,
     factory,
     webhook,
@@ -51,15 +54,18 @@ export function loadConfig(env = process.env) {
     // Fees.
     priorityFee: bigintEnv(env, 'PRIORITY_FEE_WEI', 1n * GWEI),
     urgentPriorityFee: bigintEnv(env, 'URGENT_PRIORITY_FEE_WEI', 3n * GWEI),
-    // Unreimbursed permissionless calls (unapproved vaults, FWA processing) only at or below this
-    // basefee + tip. 0 disables them.
-    permissionlessMaxFee: bigintEnv(env, 'PERMISSIONLESS_MAX_FEE_WEI', 2n * GWEI),
     rbfBlocks: intEnv(env, 'RBF_BLOCKS', 3),
     rbfBumpBps: intEnv(env, 'RBF_BUMP_BPS', 1500),
     cancelAfterBlocks: intEnv(env, 'CANCEL_AFTER_BLOCKS', 20),
-    // Timing. FWA's live settlementWindow is 1 hour; escalate at half of it.
+    // Backstop thresholds: act only once work is this overdue. 0 acts at once, like a public bot.
+    syncAfterSec: intEnv(env, 'SYNC_AFTER_S', 900),
+    finalizeAfterSec: intEnv(env, 'FINALIZE_AFTER_S', 600),
+    requestAfterSec: intEnv(env, 'REQUEST_AFTER_S', 600),
+    // Urgency: alert, and act whatever the payout. FWA's live settlementWindow is 1 hour; escalate at
+    // half of it. An auction's hard deadline leaves 30 minutes of the window, so finalize escalates
+    // 15 minutes past its deadline.
     urgentAfterSec: intEnv(env, 'URGENT_AFTER_SEC', 1800),
-    finalizeGraceSec: intEnv(env, 'FINALIZE_GRACE_SEC', 300),
+    finalizeGraceSec: intEnv(env, 'FINALIZE_GRACE_SEC', 900),
     // Work sizes.
     syncMaxCount: intEnv(env, 'SYNC_MAX_COUNT', 10),
     maxSimsPerTick: intEnv(env, 'MAX_SIMS_PER_TICK', 8),
@@ -70,8 +76,13 @@ export function loadConfig(env = process.env) {
 
 /** The config as safe to log: no key, no webhook, RPC reduced to its host. */
 export function publicConfig(cfg) {
-  const { privateKey, webhook, rpcUrl, ...rest } = cfg;
-  const out = { ...rest, rpc: redactUrl(rpcUrl), webhook: webhook ? 'set' : 'unset' };
+  const { privateKey, webhook, rpcUrl, sendRpcUrl, ...rest } = cfg;
+  const out = {
+    ...rest,
+    rpc: redactUrl(rpcUrl),
+    sendRpc: sendRpcUrl ? redactUrl(sendRpcUrl) : 'unset',
+    webhook: webhook ? 'set' : 'unset',
+  };
   for (const [k, v] of Object.entries(out)) if (typeof v === 'bigint') out[k] = v.toString();
   return out;
 }

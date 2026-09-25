@@ -1,15 +1,17 @@
 // The tick: read chain state, plan, simulate, send at most one tx. Chain I/O goes through the adapter.
 
 import {
-  classifyPull,
+  applyThresholds,
   dedupe,
   escalations,
+  expectedCost,
+  expectedPayout,
   feesFor,
   planVault,
   prioritize,
-  PULL_AUCTIONING,
+  PROBE_EVERY_BLOCKS,
   shouldPreempt,
-  VAULT,
+  worthSending,
 } from './logic.mjs';
 import { errInfo } from './log.mjs';
 
@@ -22,6 +24,12 @@ export class Keeper {
     this.keeperAddress = adapter.address;
     this.fwaParams = null;
     this.fwaParamsAt = 0;
+    /** Action key -> {avail, atMs}: when this keeper first saw that work (backstop thresholds). */
+    this.firstSeen = new Map();
+    /** Vault -> block of its last probe simulation. */
+    this.lastProbe = new Map();
+    // A bump re-simulates first: work another caller finished is cancelled, not re-sent.
+    txm.recheck = async (action, block) => (await this.prepare(action, block)) !== null;
     this.health = {
       startedAt: new Date(now()).toISOString(),
       lastTickAt: null,
@@ -32,10 +40,12 @@ export class Keeper {
       vaultErrors: 0,
       vaults: 0,
       approvedVaults: 0,
+      privateVaults: 0,
       outstandingPulls: 0,
       openAuctions: 0,
       urgent: 0,
       actionsPlanned: 0,
+      actionsDue: 0,
       balanceWei: null,
       inflight: null,
       tx: txm.stats,
@@ -50,48 +60,11 @@ export class Keeper {
     return this.fwaParams;
   }
 
-  /** One vault's planner view. Idle vaults stop after the first read. */
-  async readView(vault, block, fwaParams) {
+  /** One vault's planner view, from its own views (`syncStatus`, `openAuctionIds`, `auctionInfo`). */
+  async readView(vault, block) {
     const s = await this.adapter.readVault(vault, this.keeperAddress, block.number);
-    const view = {
-      address: vault,
-      approved: s.approved,
-      status: s.status,
-      gasCeiling: s.gasCeiling,
-      openAuctions: s.openAuctions,
-      pullsRequested: s.pullsRequested,
-      maxPulls: s.maxPulls,
-      pulls: [],
-      auctions: [],
-    };
-    const auctionIds = this.discovery.auctionIds(vault);
-    if (s.status === VAULT.Idle && s.outstanding.length === 0 && s.openAuctions === 0n) {
-      for (const id of auctionIds) this.discovery.forgetAuction(vault, id);
-      return view;
-    }
-    const ctx = {
-      now: block.timestamp,
-      blockNumber: block.number,
-      selectionTimeoutBlocks: fwaParams.selectionTimeoutBlocks,
-      settlementWindow: fwaParams.settlementWindow,
-      urgentAfterSec: this.cfg.urgentAfterSec,
-    };
-    const [pulls, auctions] = await Promise.all([
-      this.adapter.readPulls(this.fwa, s.outstanding, block.number),
-      this.adapter.readAuctions(vault, auctionIds, block.number),
-    ]);
-    view.pulls = pulls.map((p) => ({ ...p, c: classifyPull(p, ctx) }));
-    for (const a of auctions) {
-      if (a.status === PULL_AUCTIONING) view.auctions.push(a);
-      else this.discovery.forgetAuction(vault, a.requestId);
-    }
-    if (BigInt(view.auctions.length) < s.openAuctions) {
-      this.log.warn('vault reports more open auctions than discovered', {
-        vault,
-        openAuctions: s.openAuctions,
-        tracked: view.auctions.length,
-      });
-    }
+    const view = { address: vault, ...s, openAuctions: BigInt(s.openAuctionIds.length), auctions: [] };
+    if (s.auctionsPastDeadline > 0n) view.auctions = await this.adapter.readAuctions(vault, s.openAuctionIds, block.number);
     return view;
   }
 
@@ -105,12 +78,12 @@ export class Keeper {
       // Logged by discovery; keep serving the vaults already known and retry the range next tick.
       this.health.scanErrors = (this.health.scanErrors ?? 0) + 1;
     }
-    const fwaParams = await this._fwaParams();
+    const { settlementWindow } = await this._fwaParams();
 
     const views = [];
     const all = [...this.discovery.vaults];
     for (let i = 0; i < all.length; i += READ_CONCURRENCY) {
-      const results = await Promise.allSettled(all.slice(i, i + READ_CONCURRENCY).map((v) => this.readView(v, block, fwaParams)));
+      const results = await Promise.allSettled(all.slice(i, i + READ_CONCURRENCY).map((v) => this.readView(v, block)));
       results.forEach((r, j) => {
         if (r.status === 'fulfilled') return void views.push(r.value);
         this.health.vaultErrors++;
@@ -118,7 +91,7 @@ export class Keeper {
       });
     }
 
-    for (const e of escalations(views, block.timestamp, this.cfg)) {
+    for (const e of escalations(views, block.timestamp, this.cfg, settlementWindow)) {
       await this.alerter.alert(e.key, e.msg, { ...e, key: undefined });
     }
 
@@ -132,7 +105,8 @@ export class Keeper {
         this.log.warn('vault plan failed', { vault: v.address, err: errInfo(e) });
       }
     }
-    const actions = dedupe(prioritize(planned), this.txm.minedAtByKey, block.number);
+    const deduped = dedupe(prioritize(planned), this.txm.minedAtByKey, block.number);
+    const actions = applyThresholds(deduped, this.firstSeen, block.timestamp, this.now());
 
     await this.act(actions, block);
     await this.checkBalance();
@@ -144,17 +118,19 @@ export class Keeper {
       lastBlock: block.number.toString(),
       vaults: this.discovery.vaults.size,
       approvedVaults: approved.length,
-      outstandingPulls: views.reduce((n, v) => n + v.pulls.length, 0),
-      openAuctions: views.reduce((n, v) => n + v.auctions.length, 0),
-      urgent: views.reduce((n, v) => n + v.pulls.filter((p) => p.c.urgent).length, 0),
-      actionsPlanned: actions.length,
+      privateVaults: views.filter((v) => v.privateMode).length,
+      outstandingPulls: views.reduce((n, v) => n + Number(v.outstanding), 0),
+      openAuctions: views.reduce((n, v) => n + v.openAuctionIds.length, 0),
+      urgent: views.filter((v) => v.oldestAllocatedAt > 0n && block.timestamp - Number(v.oldestAllocatedAt) >= this.cfg.urgentAfterSec).length,
+      actionsPlanned: deduped.length,
+      actionsDue: actions.length,
       inflight: this.txm.inflight ? { key: this.txm.inflight.action.key, nonce: this.txm.inflight.nonce } : null,
     });
     this.health.ticks++;
     this.log.debug('tick', { block: block.number, actions: actions.map((a) => a.key) });
   }
 
-  /** Simulates actions in priority order and sends the first that does something. */
+  /** Simulates actions in priority order and sends the first that does something and pays for itself. */
   async act(actions, block) {
     if (actions.length === 0) return;
     if (this.txm.busy) {
@@ -165,6 +141,11 @@ export class Keeper {
     }
     let sims = 0;
     for (const action of actions) {
+      if (action.probe) {
+        const last = this.lastProbe.get(action.vault);
+        if (last !== undefined && block.number - last < PROBE_EVERY_BLOCKS) continue;
+        this.lastProbe.set(action.vault, block.number);
+      }
       if (sims++ >= this.cfg.maxSimsPerTick) break;
       const prepared = await this.prepare(action, block);
       if (!prepared) continue;
@@ -173,10 +154,13 @@ export class Keeper {
     }
   }
 
-  /** Simulation gate. Null when the call would revert or do nothing. */
+  /**
+   * Simulation and payout gate, at the latest block, immediately before every send and bump. Null when
+   * the call would revert, do nothing, or cost more than the vault pays (urgent protective calls excepted).
+   */
   async prepare(action, block) {
     const fees = feesFor(action, block.baseFeePerGas, this.cfg);
-    const sim = await this.adapter.simulate(action, fees, this.fwa);
+    const sim = await this.adapter.simulate(action, fees);
     if (!sim.ok) {
       const err = errInfo(sim.error);
       this.log.info('simulation reverted, skipping', { action: action.key, err });
@@ -184,12 +168,22 @@ export class Keeper {
       return null;
     }
     const n = typeof sim.result === 'bigint' ? sim.result : null;
-    if ((action.kind === 'sync' || action.kind === 'process') && n === 0n) {
-      this.log.info('simulation resolves nothing, skipping', { action: action.key });
+    if (action.kind === 'sync' && n === 0n) {
+      if (!action.probe) this.log.info('simulation resolves nothing, skipping', { action: action.key });
       if (action.urgent) await this.alerter.alert(`stuck:${action.key}`, 'urgent sync resolves nothing', { action: action.key });
       return null;
     }
-    if (action.kind === 'request' && n === 0n) this.log.info('requestPulls will end the run', { vault: action.vault });
+    // A request that returns 0 without reverting ends the run; the vault pays it like a pull.
+    const gas = sim.gasEstimate ?? sim.req.gas;
+    const basefee = block.baseFeePerGas;
+    if (!worthSending(action, gas, basefee, fees)) {
+      this.log.info('payout below cost, skipping', {
+        action: action.key,
+        payoutWei: expectedPayout(action, gas, basefee, fees),
+        costWei: expectedCost(gas, basefee, fees),
+      });
+      return null;
+    }
     return { req: sim.req, fees };
   }
 

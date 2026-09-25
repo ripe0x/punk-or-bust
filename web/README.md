@@ -29,3 +29,8 @@ npm run abi        # regenerate src/abi from the contracts (needs foundry)
 
 Routes: `#/` your vault, `#/auctions` open auctions across all vaults, `#/vault/<address>` a
 read-only view of any vault.
+
+Vaults are found by scanning the factory's `VaultCreated` logs. Everything else comes from the
+vaults' views: the auctions page reads `openAuctionIds()` and `auctionInfo()` per vault, and
+`bidRefunds` for the connected wallet. The dashboard scans one vault's logs for its feed, keep list
+and approved keepers (mappings the contract cannot list) and the latest wind-down reason.

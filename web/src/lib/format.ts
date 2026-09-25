@@ -80,6 +80,20 @@ export const PULL_STATUS = ['None', 'Pending', 'Kept', 'Sold', 'Forced', 'Refund
 
 export const FORCED_KIND = ['None', 'Stuck NFT', 'Forced NFT', 'Forced ETH', 'Forced, unknown'] as const;
 
+/** Vault `WindDownReason`, as a sentence fragment after "Winding down: ". */
+export const WIND_DOWN_REASON = [
+  'stopped by the owner',
+  'the drawdown floor is reached',
+  'the run deadline passed',
+  'the keep target is reached',
+  'the pull cap is reached',
+  'the FWA pull price is above the max pull cost',
+] as const;
+
+export function windDownReasonLabel(n: number): string {
+  return WIND_DOWN_REASON[n] ?? `unknown reason (${n})`;
+}
+
 export function vaultStatusLabel(n: number): string {
   return VAULT_STATUS[n] ?? `Unknown (${n})`;
 }

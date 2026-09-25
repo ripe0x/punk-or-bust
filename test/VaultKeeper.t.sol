@@ -87,10 +87,28 @@ contract VaultKeeperTest is VaultTestBase {
     }
 
     function testNoPayWithoutUsefulWork() public {
+        vm.prank(stranger);
+        try vault.sync(32) {} catch {}
+        assertEq(stranger.balance, 0, "nothing resolved, nothing paid");
+    }
+
+    function testEndingRunIsPaidOnce() public {
+        vm.prank(owner);
+        vault.setAutoReturn(true);
         vm.warp(block.timestamp + 7 days + 1);
+        vm.fee(1 gwei);
+        vm.txGasPrice(1 gwei);
         vm.prank(stranger);
         assertEq(vault.requestPulls(1), 0, "winds down, no pull");
-        assertEq(stranger.balance, 0, "nothing opened, nothing paid");
+        assertGe(stranger.balance, vault.bountyWei(), "ending the run is paid");
+        assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "run ended");
+        assertEq(address(vault).balance, 0, "rest auto-returned to owner");
+
+        uint256 before = stranger.balance;
+        vm.prank(stranger);
+        vm.expectRevert(Vault.BadStatus.selector);
+        vault.requestPulls(1);
+        assertEq(stranger.balance, before, "no second payment");
     }
 
     function testReimbursementBoundedByCeilingAndAppliesMidRun() public {

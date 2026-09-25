@@ -15,7 +15,7 @@ async function main() {
   delete process.env.KEEPER_PRIVATE_KEY;
   log.info('keeper starting', { config: publicConfig(cfg) });
 
-  const adapter = await createChainAdapter({ rpcUrl: cfg.rpcUrl, privateKey: cfg.privateKey });
+  const adapter = await createChainAdapter({ rpcUrl: cfg.rpcUrl, sendRpcUrl: cfg.sendRpcUrl, privateKey: cfg.privateKey });
   cfg.privateKey = undefined;
   const fwa = await adapter.readFactoryFwa(cfg.factory);
   log.info('connected', { chainId: adapter.chainId, keeper: adapter.address, factory: cfg.factory, fwa });

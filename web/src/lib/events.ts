@@ -1,6 +1,16 @@
 import { decodeEventLog, type Address, type Hex, type Log } from 'viem';
 import { vaultAbi } from '../abi/Vault';
-import { FORCED_KIND, formatBps, shortId, formatEth, formatGwei, formatTimestamp, pullStatusLabel, shortAddr } from './format';
+import {
+  FORCED_KIND,
+  formatBps,
+  shortId,
+  formatEth,
+  formatGwei,
+  formatTimestamp,
+  pullStatusLabel,
+  shortAddr,
+  windDownReasonLabel,
+} from './format';
 import type { KeepList, KeepToken } from './keepList';
 
 export interface VaultEvent {
@@ -70,8 +80,10 @@ export function describeEvent(e: VaultEvent): Omit<FeedItem, 'key' | 'txHash' | 
         tone: 'info',
       };
     }
-    case 'RunWindingDown':
-      return { title: 'Run winding down', detail: 'No new pulls. Open items are resolving.', tone: 'neutral' };
+    case 'RunWindingDown': {
+      const reason = windDownReasonLabel(Number(a.reason));
+      return { title: 'Run winding down', detail: `${reason[0].toUpperCase()}${reason.slice(1)}. No new pulls; open items are resolving.`, tone: 'neutral' };
+    }
     case 'RunEnded':
       return { title: 'Run ended', detail: `Returned ${eth(a.returned)} to the owner`, tone: 'info' };
     case 'Deposited':
@@ -117,6 +129,8 @@ export function describeEvent(e: VaultEvent): Omit<FeedItem, 'key' | 'txHash' | 
         detail: `${eth(a.amount)} to ${shortAddr(a.keeper as string)} (${String(a.gasUsed)} gas at ${formatGwei(a.gasPrice as bigint)} gwei)`,
         tone: 'neutral',
       };
+    case 'BountyPaid':
+      return { title: 'Bounty paid', detail: `${eth(a.amount)} to ${shortAddr(a.caller as string)}`, tone: 'neutral' };
     case 'AuctionStarted':
       return {
         title: 'Auction started',
@@ -170,6 +184,18 @@ export function describeEvent(e: VaultEvent): Omit<FeedItem, 'key' | 'txHash' | 
       return { title: `Auto-return ${a.enabled ? 'on' : 'off'}`, detail: '', tone: 'neutral' };
     case 'GasCeilingSet':
       return { title: 'Gas ceiling set', detail: `${formatGwei(a.ceiling as bigint)} gwei`, tone: 'neutral' };
+    case 'PrivateModeSet':
+      return {
+        title: `Private mode ${a.enabled ? 'on' : 'off'}`,
+        detail: a.enabled ? 'Only approved keepers may request pulls.' : 'Anyone may request pulls within the run limits.',
+        tone: 'neutral',
+      };
+    case 'BountiesSet':
+      return {
+        title: 'Bounties set',
+        detail: `Pull and finalize ${eth(a.bountyWei)}, sync up to ${eth(a.syncBountyMaxWei)}`,
+        tone: 'neutral',
+      };
     case 'RewardsRegistered':
       return { title: 'Rewards registered', detail: 'Epoch rewards now accrue to the owner.', tone: 'good' };
     default:
@@ -196,18 +222,16 @@ export function toFeed(events: VaultEvent[]): FeedItem[] {
 
 export interface VaultSettings extends KeepList {
   keepers: Address[];
-  feesPaid: bigint;
 }
 
 /**
- * Rebuilds the keep list, the approved keepers, and total fees paid from a vault's events. The
- * contract stores these as mappings, so events are the only way to list them.
+ * Rebuilds the keep list and the approved keepers from a vault's events. The contract stores these
+ * as mappings, so events are the only way to list them.
  */
 export function replaySettings(events: VaultEvent[]): VaultSettings {
   const collections = new Map<string, Address>();
   const tokens = new Map<string, KeepToken>();
   const keepers = new Map<string, Address>();
-  let feesPaid = 0n;
   for (const e of sortEvents(events)) {
     const a = e.args;
     if (e.name === 'KeepCollectionSet') {
@@ -223,36 +247,22 @@ export function replaySettings(events: VaultEvent[]): VaultSettings {
       const k = a.keeper as Address;
       if (a.approved) keepers.set(k.toLowerCase(), k);
       else keepers.delete(k.toLowerCase());
-    } else if (e.name === 'FeePaid') {
-      feesPaid += a.amount as bigint;
     }
   }
   return {
     collections: [...collections.values()],
     tokens: [...tokens.values()],
     keepers: [...keepers.values()],
-    feesPaid,
   };
 }
 
-export interface AuctionRef {
-  vault: Address;
-  requestId: bigint;
-  listingId: bigint;
-}
-
-/** Auctions started and not yet finalized, across any number of vaults. */
-export function openAuctionsFromEvents(events: VaultEvent[]): AuctionRef[] {
-  const open = new Map<string, AuctionRef>();
-  for (const e of sortEvents(events)) {
-    const key = `${e.address.toLowerCase()}:${String(e.args.requestId)}`;
-    if (e.name === 'AuctionStarted') {
-      open.set(key, { vault: e.address, requestId: e.args.requestId as bigint, listingId: e.args.listingId as bigint });
-    } else if (e.name === 'AuctionFinalized') {
-      open.delete(key);
-    }
+/** Why the latest run is winding down, from its last `RunWindingDown` event. Null when none. */
+export function lastWindDownReason(events: VaultEvent[]): number | null {
+  const sorted = sortEvents(events);
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    if (sorted[i].name === 'RunWindingDown') return Number(sorted[i].args.reason);
   }
-  return [...open.values()];
+  return null;
 }
 
 export interface ForcedRef {

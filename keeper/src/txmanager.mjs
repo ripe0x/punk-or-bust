@@ -21,6 +21,11 @@ export class TxManager {
     /** Block at which each action key's last tx was included. */
     this.minedAtByKey = new Map();
     this.stats = { sent: 0, replaced: 0, mined: 0, reverted: 0, cancelled: 0, sendErrors: 0 };
+    /**
+     * Optional `(action, block) => Promise<boolean>`: re-simulates before a bump. False (another caller
+     * did the work, or it no longer pays) gives the nonce up with a cancel instead of re-sending.
+     */
+    this.recheck = null;
   }
 
   get busy() {
@@ -56,6 +61,20 @@ export class TxManager {
     }
 
     if (!shouldBump(f.sentBlock, block.number, this.cfg.rbfBlocks)) return 'waiting';
+
+    if (this.recheck && f.action.kind !== 'cancel') {
+      let still = true;
+      try {
+        still = await this.recheck(f.action, block);
+      } catch (e) {
+        this.log.warn('recheck failed, bumping as is', { action: f.action.key, err: errInfo(e) });
+      }
+      if (!still) {
+        this.log.info('pending tx no longer useful, cancelling', { action: f.action.key, nonce: f.nonce });
+        await this.cancel(block);
+        return 'cancelled';
+      }
+    }
 
     const basefee = block.baseFeePerGas;
     const fresh =

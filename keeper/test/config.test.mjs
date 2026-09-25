@@ -28,6 +28,13 @@ test('loadConfig: defaults and validation', () => {
   assert.equal(cfg.port, 8080);
   assert.equal(cfg.priorityFee, 1_000_000_000n);
   assert.equal(cfg.urgentAfterSec, 1800);
+  assert.equal(cfg.syncAfterSec, 900);
+  assert.equal(cfg.finalizeAfterSec, 600);
+  assert.equal(cfg.requestAfterSec, 600);
+  assert.equal(cfg.finalizeGraceSec, 900);
+  assert.equal(cfg.sendRpcUrl, null);
+  assert.equal(loadConfig({ ...base, SYNC_AFTER_S: '0', FINALIZE_AFTER_S: '0', REQUEST_AFTER_S: '0' }).requestAfterSec, 0);
+  assert.throws(() => loadConfig({ ...base, SEND_RPC_URL: 'ws://relay' }), /SEND_RPC_URL/);
   assert.equal(cfg.fromBlock, 0n);
   assert.throws(() => loadConfig({ ...base, RPC_URL: '' }), /RPC_URL/);
   assert.throws(() => loadConfig({ ...base, KEEPER_PRIVATE_KEY: '0x12' }), /KEEPER_PRIVATE_KEY/);
@@ -39,11 +46,14 @@ test('loadConfig: defaults and validation', () => {
 test('publicConfig and the logger never print the key or the RPC path', () => {
   const lines = [];
   const log = createLogger({ write: (l) => lines.push(l) });
-  log.info('start', { config: publicConfig(loadConfig({ ...base, ALERT_WEBHOOK_URL: 'https://hooks.example/T0/secret' })), url: base.RPC_URL });
+  const cfg = loadConfig({ ...base, ALERT_WEBHOOK_URL: 'https://hooks.example/T0/secret', SEND_RPC_URL: 'https://relay.example/fast?key=relaykey' });
+  log.info('start', { config: publicConfig(cfg), url: base.RPC_URL });
   const out = lines.join('\n');
   assert.ok(!out.includes('11111111'));
   assert.ok(!out.includes('abcdef'));
   assert.ok(!out.includes('secret'));
+  assert.ok(!out.includes('relaykey'));
+  assert.ok(out.includes('https://relay.example/***'));
   assert.ok(out.includes('https://rpc.example.org/***'));
 });
 

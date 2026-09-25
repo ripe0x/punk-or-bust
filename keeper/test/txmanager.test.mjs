@@ -101,3 +101,19 @@ test('a nonce used by an untracked tx clears the slot', async () => {
   assert.equal(await txm.poll(block(101)), 'cleared');
   assert.equal(txm.minedAtByKey.size, 0);
 });
+
+test('a bump re-checks first: still useful bumps, no longer useful cancels', async () => {
+  const { adapter, txm } = setup();
+  let useful = true;
+  const checked = [];
+  txm.recheck = async (action) => (checked.push(action.key), useful);
+  await txm.send(sync, req, { maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: GWEI }, block(100));
+  assert.equal(await txm.poll(block(103)), 'bumped');
+  useful = false;
+  assert.equal(await txm.poll(block(106)), 'cancelled');
+  assert.equal(adapter.sent[2].to, '0xkeeper');
+  assert.equal(adapter.sent[2].nonce, 7);
+  // The cancel itself is bumped without a re-check.
+  assert.equal(await txm.poll(block(109)), 'bumped');
+  assert.deepEqual(checked, ['0xv1:sync', '0xv1:sync']);
+});
