@@ -33,6 +33,10 @@ export ETHERSCAN_API_KEY=<key>                # optional; Sourcify otherwise
 ./script/deploy.sh mainnet
 ```
 
+Before any signing prompt the wrapper simulates the deploy with no signer and prints the estimated
+gas, the cost at the current base fee (and at 2x), forge's required amount and the sender balance,
+then asks you to type `deploy`. Only then does forge ask for the keystore password or Ledger.
+
 The wrapper refuses a dirty tree, another branch, a non-1 chain id, raw keys, and an existing
 `deployments/mainnet.json`. The script writes `deployments/pending.json`; once every transaction has
 a successful receipt the wrapper writes `deployments/mainnet.json` (addresses, deploy tx and block,

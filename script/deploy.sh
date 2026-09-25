@@ -165,7 +165,7 @@ mainnet() {
   [ -z "$(git status --porcelain)" ] || die "checkout is not clean"
   [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "not on main"
   git fetch -q origin main
-  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "HEAD is not origin/main"
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ] || die "HEAD is not origin/main"
   [ ! -e "$RECORD" ] || die "$RECORD exists; the factory is already deployed"
   [ "$(cast chain-id --rpc-url "$MAINNET_RPC_URL")" = "1" ] || die "RPC is not chain 1"
 
@@ -177,8 +177,21 @@ mainnet() {
   fi
 
   echo "== mainnet deploy from $DEPLOY_SENDER at commit $(git rev-parse HEAD)"
-  echo "balance $(cast balance "$DEPLOY_SENDER" --ether --rpc-url "$MAINNET_RPC_URL") ETH"
-  read -r -p "type 'deploy' to broadcast: " ok
+  # Simulate first with no signer, so the cost is shown before any keystore or Ledger prompt.
+  echo "== simulating (no signing)"
+  local sim gas basefee
+  sim="$(forge script "$SCRIPT" --rpc-url "$MAINNET_RPC_URL" --sender "$DEPLOY_SENDER" 2>&1)" ||
+    { echo "$sim" | tail -40; die "simulation failed"; }
+  gas="$(grep -oE 'Estimated total gas used for script: [0-9]+' <<<"$sim" | grep -oE '[0-9]+$' || true)"
+  [ -n "$gas" ] || { echo "$sim" | tail -40; die "no gas estimate in the simulation output"; }
+  basefee="$(cast base-fee --rpc-url "$MAINNET_RPC_URL")"
+  echo "estimated gas        $gas (forge adds a 30% buffer; about 8.5M is actually used)"
+  echo "current base fee     $(cast from-wei "$basefee" gwei) gwei"
+  echo "cost at base fee     $(cast from-wei "$((gas * basefee))") ETH"
+  echo "cost at 2x base fee  $(cast from-wei "$((gas * basefee * 2))") ETH (upper bound if fees rise)"
+  grep -E 'Estimated amount required' <<<"$sim" || true
+  echo "sender balance       $(cast balance "$DEPLOY_SENDER" --ether --rpc-url "$MAINNET_RPC_URL") ETH"
+  read -r -p "type 'deploy' to sign and broadcast: " ok
   [ "$ok" = "deploy" ] || die "aborted"
 
   mkdir -p deployments
