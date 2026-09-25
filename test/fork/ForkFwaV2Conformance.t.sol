@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {MaskedCode} from "../../script/MaskedCode.sol";
 import {ForkBase, IForkHelper} from "./ForkBase.sol";
 
 interface IVrfServiceFee {
@@ -89,52 +90,19 @@ contract ForkFwaV2ConformanceTest is ForkBase {
         assertFalse(TOKEN.isDistributor(address(REWARD_VAULT)), "reward vault grant absent at pinned block");
     }
 
-    /// @dev Walks both codes; every difference must sit in a zeroed PUSH32 operand of `ref` (an
-    ///      immutable), which is masked. Returns the distinct immutable values as addresses.
+    /// @dev Shared with the deploy script's preflight: every difference from `ref` is a masked
+    ///      immutable, and the masked code matches `ref` exactly.
     function _matchMasked(bytes memory live, bytes memory ref, string memory label)
         internal
         pure
         returns (address[] memory imms)
     {
-        assertEq(live.length, ref.length, string.concat(label, " code length"));
-        address[] memory found = new address[](8);
-        uint256 n;
-        uint256 i;
-        while (i < live.length) {
-            if (live[i] == ref[i]) {
-                ++i;
-                continue;
-            }
-            uint256 q = i;
-            while (ref[q] == 0) --q;
-            require(ref[q] == 0x7f, "difference outside a PUSH32");
-            uint256 p = q + 1;
-            require(p + 32 <= live.length, "operand overruns code");
-            uint256 word;
-            for (uint256 k; k < 32; ++k) {
-                require(ref[p + k] == 0, "operand not zeroed in ref");
-                word = (word << 8) | uint8(live[p + k]);
-                live[p + k] = 0;
-            }
-            require(word >> 160 == 0, "immutable is not an address");
-            if (!_has(_slice(found, n), address(uint160(word)))) found[n++] = address(uint160(word));
-            i = p + 32;
-        }
-        assertEq(keccak256(live), keccak256(ref), string.concat(label, " masked runtime"));
-        imms = _slice(found, n);
-    }
-
-    function _slice(address[] memory a, uint256 n) internal pure returns (address[] memory out) {
-        out = new address[](n);
-        for (uint256 i; i < n; ++i) {
-            out[i] = a[i];
-        }
+        bytes32 maskedHash;
+        (imms, maskedHash) = MaskedCode.mask(live, ref);
+        assertEq(maskedHash, keccak256(ref), string.concat(label, " masked runtime"));
     }
 
     function _has(address[] memory a, address x) internal pure returns (bool) {
-        for (uint256 i; i < a.length; ++i) {
-            if (a[i] == x) return true;
-        }
-        return false;
+        return MaskedCode.has(a, x);
     }
 }

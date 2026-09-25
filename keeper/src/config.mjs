@@ -67,7 +67,7 @@ export function loadConfig(env = process.env) {
     urgentAfterSec: intEnv(env, 'URGENT_AFTER_SEC', 1800),
     finalizeGraceSec: intEnv(env, 'FINALIZE_GRACE_SEC', 900),
     // Work sizes.
-    syncMaxCount: intEnv(env, 'SYNC_MAX_COUNT', 10),
+    syncMaxCount: intEnv(env, 'SYNC_MAX_COUNT', 32),
     maxSimsPerTick: intEnv(env, 'MAX_SIMS_PER_TICK', 8),
     logChunk: intEnv(env, 'LOG_CHUNK', 5000),
     alertCooldownMs: intEnv(env, 'ALERT_COOLDOWN_MS', 15 * 60_000),

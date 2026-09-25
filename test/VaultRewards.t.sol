@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {IFWA} from "../src/interfaces/IFWA.sol";
+import {IFWARewards} from "../src/interfaces/IFWARewards.sol";
 import {Vault} from "../src/Vault.sol";
 import {VaultFactory} from "../src/VaultFactory.sol";
 import {VaultTestBase} from "./harness/VaultTestBase.sol";
@@ -82,5 +84,19 @@ contract VaultRewardsTest is VaultTestBase {
         vm.prank(stranger);
         rewardVault.claim(address(vault), owner);
         assertEq(fwat.balanceOf(owner), 1000 ether, "owner paid");
+    }
+
+    /// @dev The rewards module is read from FWA at claim time, so a replaced module is followed.
+    function testCollectFollowsChangedRewardsModule() public {
+        _createVault(3 ether, _params());
+        address moved = makeAddr("movedRewards");
+        vm.etch(moved, hex"00");
+        vm.mockCall(address(pool), abi.encodeWithSelector(IFWA.rewards.selector), abi.encode(moved));
+        vm.mockCall(moved, abi.encodeWithSelector(IFWARewards.claimEpochTokens.selector), abi.encode(uint256(0)));
+        fwat.setDistributor(address(rewardVault), true);
+        uint256[] memory epochs = _epochs();
+        vm.expectCall(moved, abi.encodeCall(IFWARewards.claimEpochTokens, (epochs)));
+        vm.prank(address(rewardVault));
+        vault.collectRewards(epochs, false, 0);
     }
 }

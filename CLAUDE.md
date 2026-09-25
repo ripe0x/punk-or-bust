@@ -8,7 +8,8 @@ lists the FWA behaviors the code must handle.
 - This repo is public. No secrets, keys, `.env` files, personal names or emails, or local paths.
 - The spec is canonical. If code needs a decision the spec does not make, stop and ask; the answer
   goes into `SPEC.md` in the same PR.
-- No new docs beyond `SPEC.md`, `docs/FWA-HAZARDS.md` and READMEs. No reports, logs or run notes.
+- No new docs beyond `SPEC.md`, `docs/FWA-HAZARDS.md`, `docs/LAUNCH.md` and READMEs. No reports,
+  logs or run notes.
 - `refs/` holds verified FWA sources from Sourcify, checked by `python3 script/fwa_refs.py`. Never
   edit them by hand; re-vendor with the script.
 - Tests run against the real verified FWA V2 bytecode (`refs/fwa-v2/FWAV2.json`). A test double

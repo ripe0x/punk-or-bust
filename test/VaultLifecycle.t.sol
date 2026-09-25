@@ -53,15 +53,23 @@ contract VaultLifecycleTest is VaultTestBase {
         assertFalse(vault.privateMode(), "public by default");
     }
 
-    function testPriceCapEndsRun() public {
+    function testPriceCapEndsRunOnlyForOwner() public {
         Vault.RunParams memory p = _params();
         (, uint256 total) = _price();
         p.maxPullCostWei = total - 1;
         _createVault(3 ether, p);
         _list(depositor, 1, 1 ether);
+        vm.prank(keeper);
+        vm.expectRevert(Vault.PriceAboveCap.selector);
+        vault.requestPulls(1);
+        vm.prank(stranger);
+        vm.expectRevert(Vault.PriceAboveCap.selector);
+        vault.requestPulls(1);
+        assertEq(uint8(vault.status()), uint8(Vault.Status.Running), "others cannot end the run");
+
         vm.expectEmit(address(vault));
         emit Vault.RunWindingDown(Vault.WindDownReason.PriceCap);
-        vm.prank(keeper);
+        vm.prank(owner);
         assertEq(vault.requestPulls(1), 0, "quote above the cap");
         assertEq(uint8(vault.status()), uint8(Vault.Status.Idle), "ended");
     }

@@ -414,19 +414,6 @@ export const vaultAbi = [
   },
   {
     "type": "function",
-    "name": "REWARDS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "REWARD_VAULT",
     "inputs": [],
     "outputs": [
@@ -473,19 +460,6 @@ export const vaultAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "TOKEN",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -2124,6 +2098,11 @@ export const vaultAbi = [
   {
     "type": "error",
     "name": "NotPriced",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PriceAboveCap",
     "inputs": []
   },
   {
