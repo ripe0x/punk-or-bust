@@ -18,6 +18,12 @@ contract MockFWAToken is ERC20 {
         return "FWAT";
     }
 
+    /// @notice The canonical Permit2 address the real token reports. Solady's ERC20 already gives it
+    ///         an infinite allowance.
+    function permit2() external pure returns (address) {
+        return 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    }
+
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }
