@@ -10,5 +10,21 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "abi": "node scripts/abi.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.103.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "viem": "^2.56.9",
+    "wagmi": "^2.19.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
   }
 }
