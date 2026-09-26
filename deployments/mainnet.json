@@ -1,0 +1,29 @@
+{
+  "chainId": 1,
+  "commit": "145bb4209c7235284fcf249beae6f24611b0fec2",
+  "deployer": "0xCB43078C32423F5348Cab5885911C3B5faE217F9",
+  "factory": "0x2D774bE0c47902306D911b049E03D02dD7E399C6",
+  "feeRecipient": "0xea194A186EBe76A84E2B2027f5f23F81939c05AD",
+  "fwa": "0x958C41181182e76F221331b2755b77D9e1426A98",
+  "fwaClientLib": "0xAf7004D41A852C7ddA377551ce4Af2FffEAbdf23",
+  "rewardVault": "0xEa20a110ad3Dfc483977d14f80203994E65D34FB",
+  "router": "0x186F4c10152f9a902573b3Fe07F48689Fa8a4927",
+  "transferHelper": "0xcE6d5B618e034f87C7a8B6dCa65FB8669b8c301B",
+  "vaultImplementation": "0x0e4bC3E18919cDD4A83746F030b7b89f9Dc522F1",
+  "deployTx": "0xa0de6215a7074703aa9af87d1c271be2cbfba541638bbdcfaf760e9fbd662f66",
+  "deployBlock": 26064361,
+  "transactions": [
+    {
+      "label": "FwaClientLib",
+      "hash": "0xd8c5a68c42a5739c8ca4eb4fdf5420ef7afcbba0fdc59a6d897b1dc8bc5ba1e9",
+      "block": 26064360,
+      "gasUsed": 1765999
+    },
+    {
+      "label": "VaultFactory",
+      "hash": "0xa0de6215a7074703aa9af87d1c271be2cbfba541638bbdcfaf760e9fbd662f66",
+      "block": 26064361,
+      "gasUsed": 6690159
+    }
+  ]
+}
