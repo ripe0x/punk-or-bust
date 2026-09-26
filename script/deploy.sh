@@ -182,6 +182,8 @@ mainnet() {
 
   echo "== mainnet deploy from $DEPLOY_SENDER at commit $(git rev-parse HEAD)"
   # Simulate first with no signer, so the cost is shown before any keystore or Ledger prompt.
+  echo "== compiling (the first build can take several minutes)"
+  forge build
   echo "== simulating (no signing)"
   local sim gas basefee
   sim="$(forge script "$SCRIPT" --rpc-url "$MAINNET_RPC_URL" --sender "$DEPLOY_SENDER" 2>&1)" ||
