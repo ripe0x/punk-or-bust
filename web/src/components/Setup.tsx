@@ -13,7 +13,7 @@ import { useNftImage } from '../hooks/useNftImage';
 import { COLLECTIONS, displayName, isPunks, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
-import { formatEth, formatGwei, parseEthInput } from '../lib/format';
+import { formatEth, formatEthFixed, formatGwei, parseEthInput } from '../lib/format';
 import { diffKeepList, type KeepToken } from '../lib/keepList';
 import { checkGasCeiling, checkRunForm, defaultRunForm, parseAddresses, type RunForm } from '../lib/runParams';
 import { Picker } from './Picker';
@@ -289,9 +289,9 @@ export function Setup({
           </div>
           {spendWei > 0n && quote ? (
             <div className="body">
-              A pull costs about <span className="mono">{formatEth(quote.total, 2)} ETH</span> right now. One you don&apos;t keep sells back for
-              about <span className="mono">{formatEth(sellBack, 2)} ETH</span>, so each pull uses about{' '}
-              <span className="mono">{formatEth(cost > 0n ? cost : 0n, 2)} ETH</span> of your <span className="mono">{formatEth(spendWei, 2)} ETH</span>{' '}
+              A pull costs about <span className="mono">{formatEthFixed(quote.total, 2)} ETH</span> right now. One you don&apos;t keep sells back for
+              about <span className="mono">{formatEthFixed(sellBack, 2)} ETH</span>, so each pull uses about{' '}
+              <span className="mono">{formatEthFixed(cost > 0n ? cost : 0n, 2)} ETH</span> of your <span className="mono">{formatEthFixed(spendWei, 2)} ETH</span>{' '}
               limit.
             </div>
           ) : null}
@@ -299,7 +299,7 @@ export function Setup({
           <div className="fine">
             Each keep shortens the run, since it isn&apos;t sold back. The run stops at{' '}
             <span className="mono" style={{ color: '#f4f2ec' }}>
-              {formatEth(stopAt, 2)} ETH
+              {formatEthFixed(stopAt, 2)} ETH
             </span>{' '}
             and the rest goes back to your wallet.
           </div>
@@ -315,7 +315,7 @@ export function Setup({
 
         <div className="cta-block">
           <button className="btn" type="submit" disabled={tx.busy}>
-            Start run with {formatEth(spendWei, 3)} ETH
+            Start run with {formatEthFixed(spendWei, 2)} ETH
           </button>
           <div className="cta-note">You can stop anytime and get the rest back.</div>
         </div>
