@@ -24,16 +24,6 @@ export function Eth({ wei }: { wei: bigint }) {
   return <span className="num">{formatEth(wei)} ETH</span>;
 }
 
-export function Stat({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
-  return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{children}</div>
-      {hint ? <div className="stat-hint">{hint}</div> : null}
-    </div>
-  );
-}
-
 export function Field({
   label,
   hint,
@@ -72,11 +62,12 @@ export function TxStatus({ state }: { state: TxState }) {
   );
 }
 
+/** A plain titled block, used inside the "More" panel on Run (owner settings, sweep) and for read-only vault views. */
 export function Section({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>{title}</h2>
+    <section className="subsection">
+      <div className="row-between">
+        <h3>{title}</h3>
         {actions}
       </div>
       {children}

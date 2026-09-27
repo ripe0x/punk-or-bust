@@ -6,6 +6,7 @@ import { vaultAbi } from '../abi/Vault';
 import { fwaAbi } from '../abi/IFWA';
 import { factoryAddress } from '../config';
 import { decodeVaultLogs, lastWindDownReason, replaySettings, toFeed, type VaultEvent } from '../lib/events';
+import { toOpenAuction, type AuctionInfo, type OpenAuction } from '../lib/auction';
 import type { RunParams } from '../lib/runParams';
 import { useLogScan } from './useLogScan';
 import { VAULT_CREATED, VAULT_EVENTS } from './abiEvents';
@@ -171,6 +172,53 @@ export function useQuote(fwa: Address | undefined) {
   });
   const d = q.data as readonly [bigint, bigint, bigint] | undefined;
   return d ? { fee: d[0], vrf: d[1], total: d[2] } : undefined;
+}
+
+export interface ListingInfo {
+  collection: Address;
+  tokenId: bigint;
+  value: bigint;
+  status: number;
+}
+
+/** FWA `listings(id)` for a batch of listing ids, keyed by id string. Used to show a pull's NFT and backing. */
+export function useListings(fwa: Address | undefined, listingIds: bigint[]) {
+  const reads = useReadContracts({
+    contracts: fwa ? listingIds.map((id) => ({ address: fwa, abi: fwaAbi, functionName: 'listings', args: [id] }) as const) : [],
+    query: { enabled: !!fwa && listingIds.length > 0, refetchInterval: POLL },
+  });
+  return useMemo(() => {
+    const out: Record<string, ListingInfo> = {};
+    listingIds.forEach((id, i) => {
+      const r = reads.data?.[i]?.result as readonly [Address, Address, Address, bigint, bigint, bigint, bigint, bigint, bigint, bigint, number] | undefined;
+      if (r) out[id.toString()] = { collection: r[0], tokenId: r[3], value: r[5], status: Number(r[10]) };
+    });
+    return out;
+  }, [reads.data, listingIds]);
+}
+
+/** Open miss auctions for one vault, keyed by request id string. */
+export function useVaultAuctions(vault: Address | undefined) {
+  const ids = useReadContract({
+    address: vault,
+    abi: vaultAbi,
+    functionName: 'openAuctionIds',
+    query: { enabled: !!vault, refetchInterval: 10_000 },
+  });
+  const requestIds = (ids.data as readonly bigint[] | undefined) ?? [];
+  const infos = useReadContracts({
+    contracts: vault ? requestIds.map((id) => ({ address: vault, abi: vaultAbi, functionName: 'auctionInfo', args: [id] }) as const) : [],
+    query: { enabled: !!vault && requestIds.length > 0, refetchInterval: 10_000 },
+  });
+  return useMemo(() => {
+    const out: Record<string, OpenAuction> = {};
+    requestIds.forEach((id, i) => {
+      const r = infos.data?.[i]?.result as AuctionInfo | undefined;
+      if (r && r[6] !== 0n) out[id.toString()] = toOpenAuction(vault!, id, r);
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [infos.data, requestIds, vault]);
 }
 
 /** FWA pool address, read from the factory. */

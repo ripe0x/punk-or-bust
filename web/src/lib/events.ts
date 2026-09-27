@@ -256,6 +256,57 @@ export function replaySettings(events: VaultEvent[]): VaultSettings {
   };
 }
 
+export type PullCardStatus = 'pending' | 'kept' | 'sold' | 'forced' | 'refunded' | 'auctioning';
+
+const PULL_CARD_STATUS: Record<number, PullCardStatus> = {
+  1: 'pending',
+  2: 'kept',
+  3: 'sold',
+  4: 'forced',
+  5: 'refunded',
+  6: 'auctioning',
+};
+
+export interface PullCard {
+  requestId: bigint;
+  listingId?: bigint;
+  spentPerPull?: bigint;
+  status: PullCardStatus;
+  blockNumber: bigint;
+  txHash: Hex;
+}
+
+/**
+ * One card per pull request, newest first: pending until a `PullResolved` lands (a completed
+ * auction re-emits `PullResolved` with the final outcome, so the latest one wins), carrying the
+ * per-pull price from the `PullsRequested` batch it belongs to.
+ */
+export function pullCardsFromEvents(events: VaultEvent[]): PullCard[] {
+  const cards = new Map<string, PullCard>();
+  for (const e of sortEvents(events)) {
+    if (e.name === 'PullsRequested') {
+      const ids = e.args.requestIds as readonly bigint[];
+      const spentPerPull = e.args.spentPerPull as bigint;
+      for (const requestId of ids) {
+        cards.set(requestId.toString(), { requestId, spentPerPull, status: 'pending', blockNumber: e.blockNumber, txHash: e.txHash });
+      }
+    } else if (e.name === 'PullResolved') {
+      const requestId = e.args.requestId as bigint;
+      const key = requestId.toString();
+      const prev = cards.get(key);
+      cards.set(key, {
+        requestId,
+        listingId: e.args.listingId as bigint,
+        spentPerPull: prev?.spentPerPull,
+        status: PULL_CARD_STATUS[Number(e.args.outcome)] ?? 'pending',
+        blockNumber: e.blockNumber,
+        txHash: e.txHash,
+      });
+    }
+  }
+  return [...cards.values()].sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? 1 : -1));
+}
+
 /** Why the latest run is winding down, from its last `RunWindingDown` event. Null when none. */
 export function lastWindDownReason(events: VaultEvent[]): number | null {
   const sorted = sortEvents(events);

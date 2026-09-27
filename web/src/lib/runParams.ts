@@ -27,6 +27,18 @@ export interface CheckedRun {
 
 const wholeNumber = (s: string) => (/^\d+$/.test(s.trim()) ? BigInt(s.trim()) : null);
 
+/** A reasonable starting point for a new run's form: 7 day deadline, 100 max pulls, no keep cap. */
+export function defaultRunForm(nowSec: number): RunForm {
+  return {
+    amountEth: '',
+    drawdownPct: 25,
+    maxPullCostEth: '',
+    deadline: unixToLocalInput(nowSec + 7 * 86400),
+    maxPulls: '100',
+    stopAfterKeeps: '0',
+  };
+}
+
 /** Local datetime-local string to unix seconds. */
 export function deadlineToUnix(local: string): bigint | null {
   const ms = new Date(local).getTime();

@@ -3,90 +3,93 @@ import { useAccount } from 'wagmi';
 import type { Address } from 'viem';
 import { vaultAbi } from '../abi/Vault';
 import { useOpenAuctions, type OpenAuction } from '../hooks/useAuctions';
+import { useNftImage } from '../hooks/useNftImage';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { bidExtends, secondsLeft } from '../lib/auction';
-import { formatDuration, formatEth, parseEthInput, shortId } from '../lib/format';
-import { Addr, Eth, Section, TxStatus } from './ui';
+import { formatDuration, formatEth, parseEthInput } from '../lib/format';
+import { collectionName } from './Run';
+import { TxStatus } from './ui';
 
 export function Auctions() {
   const { address } = useAccount();
   const { auctions, credits, vaultCount, loading, error } = useOpenAuctions(address);
-  const now = useNow(1000);
 
   return (
     <>
-      <Section title="Open auctions">
-        <p className="muted small">
-          A pull the oracle says is clearly under-backed goes to a short auction instead of selling back. The opening bid is the FWA backstop plus
-          5%, each bid at least 5% over the last. A bid in the last 5 minutes adds 5 minutes, up to a hard cap. Outbid ETH is refunded.
+      <section className="section">
+        <h1 className="big">Auctions</h1>
+        <p className="lede">Pulls likely worth more than their sell-back price. Each one runs up to an hour.</p>
+      </section>
+      {credits.map((c) => (
+        <section key={c.vault} style={{ padding: '0 12px 16px' }}>
+          <OutbidBanner vault={c.vault} amount={c.amount} me={address} />
+        </section>
+      ))}
+      {error ? (
+        <p className="field-error" style={{ padding: '0 20px' }}>
+          {error}
         </p>
-        {error ? <p className="field-error">{error}</p> : null}
-        {loading && !auctions.length ? <p className="muted">Loading auctions across {vaultCount} vaults.</p> : null}
-        {!loading && !auctions.length ? <p className="muted">No open auctions across {vaultCount} vaults.</p> : null}
-        <div className="auctions">
-          {auctions.map((a) => (
-            <AuctionCard key={`${a.vault}:${a.requestId}`} a={a} now={now} me={address} />
-          ))}
-        </div>
-      </Section>
-      {credits.length ? (
-        <Section title="Your bid refunds">
-          {credits.map((c) => (
-            <RefundRow key={c.vault} vault={c.vault} amount={c.amount} me={address!} />
-          ))}
-        </Section>
       ) : null}
+      {loading && !auctions.length ? <p className="empty">Loading auctions across {vaultCount} vaults.</p> : null}
+      {!loading && !auctions.length ? <p className="empty">No open auctions right now.</p> : null}
+      <div className="lots" aria-label="Open auctions">
+        {auctions.map((a) => (
+          <Lot key={`${a.vault}:${a.requestId}`} a={a} me={address} />
+        ))}
+      </div>
     </>
   );
 }
 
-function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address }) {
+function OutbidBanner({ vault, amount, me }: { vault: Address; amount: bigint; me?: Address }) {
   const tx = useTx();
-  const min = a.minNextBid;
+  return (
+    <div className="outbid-banner">
+      <div>
+        <div className="title">You were outbid</div>
+        <div className="sub">
+          <span className="mono" style={{ color: '#f4f2ec' }}>
+            {formatEth(amount, 4)} ETH
+          </span>{' '}
+          is ready to claim
+        </div>
+      </div>
+      <button disabled={!me || tx.busy} onClick={() => tx.send('Claim refund', { address: vault, abi: vaultAbi, functionName: 'claimBidRefund', args: [me!] })}>
+        Claim
+      </button>
+    </div>
+  );
+}
+
+function Lot({ a, me }: { a: OpenAuction; me?: Address }) {
+  const tx = useTx();
+  const now = useNow(1000);
+  const { image, bg } = useNftImage(a.collection, a.tokenId);
   const [text, setText] = useState('');
-  const value = text ? parseEthInput(text) : min;
+  const value = text ? parseEthInput(text) : a.minNextBid;
   const left = secondsLeft(a.deadline, now);
   const ended = left === 0;
   const leading = !!me && a.highBidder.toLowerCase() === me.toLowerCase();
-  const tooLow = value !== null && value < min;
+  const tooLow = value !== null && value < a.minNextBid;
+  const name = `${collectionName(a.collection)} #${a.tokenId.toString()}`;
 
   return (
-    <article className="auction">
-      <div className="auction-head">
-        <div>
-          <Addr address={a.collection} />
-          <span className="mono"> #{a.tokenId.toString()}</span>
+    <div className="lot">
+      <div className="lot-image">
+        <div style={{ position: 'absolute', inset: 0, background: bg }}>{image ? <img src={image} alt={name} /> : null}</div>
+        <div className="lot-timer">
+          <span className="dot" />
+          {ended ? 'ended' : formatDuration(left)}
         </div>
-        <span className={`pill ${ended ? 'pill-idle' : left < 300 ? 'pill-warn' : 'pill-good'}`}>{ended ? 'Ended' : formatDuration(left)}</span>
       </div>
-      <dl className="kv small">
-        <dt>Backstop</dt>
-        <dd>
-          <Eth wei={a.backstop} />
-        </dd>
-        <dt>High bid</dt>
-        <dd>
-          {a.highBid > 0n ? (
-            <>
-              <Eth wei={a.highBid} /> {leading ? <span className="pill pill-good">You</span> : <Addr address={a.highBidder} />}
-            </>
-          ) : (
-            'None'
-          )}
-        </dd>
-        <dt>Min next bid</dt>
-        <dd>
-          <Eth wei={min} />
-        </dd>
-        <dt>Vault</dt>
-        <dd>
-          <Addr address={a.vault} /> request {shortId(a.requestId)}, listing {shortId(a.listingId)}
-        </dd>
-      </dl>
-      {ended ? (
-        <>
-          <p className="small">Bidding closed. Anyone can finalize and is paid gas plus a bounty: the winner gets the NFT, or it sells back.</p>
+      <div className="lot-body">
+        <div className="lot-name">{name}</div>
+        <div className="lot-next">
+          <span className="cap">{leading ? 'You are leading' : 'Next bid'}</span>
+          <span className="value num">{formatEth(a.minNextBid, 2)} ETH</span>
+        </div>
+        {ended ? (
           <button
             className="btn-small"
             disabled={!me || tx.busy}
@@ -94,48 +97,22 @@ function AuctionCard({ a, now, me }: { a: OpenAuction; now: number; me?: Address
           >
             Finalize
           </button>
-        </>
-      ) : (
-        <div className="row">
-          <input
-            aria-label="Bid in ETH"
-            inputMode="decimal"
-            placeholder={formatEth(min, 6)}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button
-            disabled={!me || tx.busy || value === null || tooLow}
-            onClick={() =>
-              tx.send('Bid', { address: a.vault, abi: vaultAbi, functionName: 'bid', args: [a.requestId], value: value! })
-            }
-          >
-            {me ? 'Bid' : 'Connect to bid'}
-          </button>
-        </div>
-      )}
-      {tooLow ? <p className="field-error">At least {formatEth(min, 6)} ETH.</p> : null}
-      {!ended && bidExtends(a.deadline, now) ? <p className="small muted">A bid now adds 5 minutes.</p> : null}
-      <TxStatus state={tx.state} />
-    </article>
-  );
-}
-
-function RefundRow({ vault, amount, me }: { vault: Address; amount: bigint; me: Address }) {
-  const tx = useTx();
-  return (
-    <div className="row wrap">
-      <span>
-        <Eth wei={amount} /> from vault <Addr address={vault} />
-      </span>
-      <button
-        className="btn-small"
-        disabled={tx.busy}
-        onClick={() => tx.send('Claim refund', { address: vault, abi: vaultAbi, functionName: 'claimBidRefund', args: [me] })}
-      >
-        Claim to my wallet
-      </button>
-      <TxStatus state={tx.state} />
+        ) : (
+          <div className="lot-bid-form">
+            <input aria-label="Bid in ETH" inputMode="decimal" placeholder={formatEth(a.minNextBid, 4)} value={text} onChange={(e) => setText(e.target.value)} />
+            <button
+              className="btn-small"
+              disabled={!me || tx.busy || value === null || tooLow}
+              onClick={() => tx.send('Bid', { address: a.vault, abi: vaultAbi, functionName: 'bid', args: [a.requestId], value: value! })}
+            >
+              {me ? 'Bid' : 'Connect to bid'}
+            </button>
+            {tooLow ? <span className="field-error">At least {formatEth(a.minNextBid, 4)} ETH.</span> : null}
+            {bidExtends(a.deadline, now) ? <span className="hint-text">A bid now adds 5 minutes.</span> : null}
+          </div>
+        )}
+        <TxStatus state={tx.state} />
+      </div>
     </div>
   );
 }
