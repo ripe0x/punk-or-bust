@@ -35,6 +35,7 @@ function useRoute(): Route {
 
 export function App() {
   const route = useRoute();
+  const [notice, setNotice] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
   const { vault, predicted, loading, refetch } = useOwnerVault(address);
 
@@ -67,6 +68,11 @@ export function App() {
             ))}
           </div>
         ) : null}
+        {notice && route.page === 'run' ? (
+          <div className="banner" role="status">
+            <p>{notice}</p>
+          </div>
+        ) : null}
         {route.page === 'home' ? <Home /> : null}
         {route.page === 'setup' ? (
           <Setup
@@ -74,7 +80,8 @@ export function App() {
             vault={vault}
             predicted={predicted}
             loading={loading}
-            onDone={() => {
+            onDone={(msg) => {
+              setNotice(msg ?? null);
               void refetch();
               window.location.hash = '#/run';
             }}

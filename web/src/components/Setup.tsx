@@ -33,7 +33,7 @@ export function Setup({
   vault?: Address;
   predicted?: Address;
   loading: boolean;
-  onDone: () => void;
+  onDone: (notice?: string) => void;
 }) {
   const { state: vaultState, loading: vaultLoading } = useVaultState(vault);
   const events = useVaultEvents(vault);
@@ -67,7 +67,7 @@ export function Setup({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [tried, setTried] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
 
   // Hydrate from the existing vault's settings once, for the "start a new run" flow.
   const hydrated = useRef(false);
@@ -140,10 +140,7 @@ export function Setup({
           settingsFailed = true;
         }
       }
-      if (settingsFailed) {
-        setSettingsError('Your run started, but some settings weren\'t saved. You can set them again under More on your run.');
-      }
-      onDone();
+      onDone(settingsFailed ? "Your run started, but some settings weren't saved. You can set them again under More on your run." : undefined);
       return;
     }
 
@@ -179,7 +176,7 @@ export function Setup({
       }
       const value = checkedRun.value ?? 0n;
       if (value === 0n && vaultState.idle === 0n) {
-        setTried(true);
+        setAmountError('Add ETH to start a run.');
         return;
       }
       const ok = await tx.send('Start run', { address: vault, abi: vaultAbi, functionName: 'startRun', args: [checkedRun.params], value });
@@ -208,6 +205,8 @@ export function Setup({
   }
 
   const errs = tried ? checkedRun.errors : {};
+  const finalErrs = { ...errs };
+  if (amountError) finalErrs.amountEth = amountError;
 
   return (
     <>
@@ -252,7 +251,10 @@ export function Setup({
             <label className="budget-card">
               <span className="cap">Spend</span>
               <span className="budget-input-row">
-                <input inputMode="decimal" aria-label="ETH to spend" value={spendEth} onChange={(e) => setSpendEth(e.target.value)} />
+                <input inputMode="decimal" aria-label="ETH to spend" value={spendEth} onChange={(e) => {
+                  setSpendEth(e.target.value);
+                  setAmountError(null);
+                }} />
                 <span className="unit">ETH</span>
               </span>
             </label>
@@ -269,7 +271,7 @@ export function Setup({
               </span>
             </label>
           </div>
-          {errs.amountEth ? <span className="field-error">{errs.amountEth}</span> : null}
+          {finalErrs.amountEth ? <span className="field-error">{finalErrs.amountEth}</span> : null}
         </div>
 
         <section aria-label="What to expect" className="expect">
@@ -310,12 +312,9 @@ export function Setup({
           <div className="cta-note">You can stop anytime and get the rest back.</div>
         </div>
         <TxStatus state={tx.state} />
-        {settingsError ? (
-          <p className="field-error">{settingsError}</p>
-        ) : null}
-        {tried && Object.keys(errs).length ? (
+        {(tried || amountError) && Object.keys(finalErrs).length ? (
           <ul className="plain">
-            {Object.entries(errs).map(([k, v]) => (
+            {Object.entries(finalErrs).map(([k, v]) => (
               <li key={k} className="field-error">
                 {v}
               </li>
