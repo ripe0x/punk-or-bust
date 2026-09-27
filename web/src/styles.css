@@ -117,16 +117,19 @@ button:disabled {
   font-weight: 700;
   font-size: 18px;
   letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 .top nav {
   display: flex;
   gap: 18px;
   align-items: center;
   font-size: 14px;
+  flex-shrink: 0;
 }
 .top nav a {
   color: var(--text-2);
   text-decoration: none;
+  white-space: nowrap;
 }
 .top nav a.active {
   color: var(--ink);
@@ -653,6 +656,8 @@ form.stack {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .settings-row-label {
   font-size: 16px;
@@ -663,8 +668,9 @@ form.stack {
   color: var(--text-3);
   line-height: 1.4;
 }
-.settings-value-input {
+.settings-row .settings-value-input {
   width: 112px;
+  min-width: 0;
   height: 44px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -675,6 +681,12 @@ form.stack {
   text-align: right;
   color: var(--ink);
   flex-shrink: 0;
+}
+.settings-row .settings-value-input[type='datetime-local'] {
+  width: 190px;
+  font-size: 13px;
+  text-align: left;
+  padding: 0 8px;
 }
 .section-title-row {
   display: flex;
@@ -1359,6 +1371,10 @@ ul.plain li {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.connect [data-testid='rk-account-button'] div {
+  white-space: nowrap;
 }
 
 .empty {
@@ -1370,5 +1386,16 @@ ul.plain li {
 @media (max-width: 400px) {
   .hero h1 {
     font-size: 34px;
+  }
+  .top {
+    gap: 8px;
+    padding: 16px 14px;
+  }
+  .brand-name {
+    font-size: 16px;
+  }
+  .top nav {
+    gap: 12px;
+    font-size: 13px;
   }
 }

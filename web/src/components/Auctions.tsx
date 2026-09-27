@@ -7,6 +7,7 @@ import { useNftImage } from '../hooks/useNftImage';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { bidExtends, secondsLeft } from '../lib/auction';
+import { friendlyLoadError } from '../lib/errors';
 import { formatDuration, formatEth, parseEthInput } from '../lib/format';
 import { collectionName } from './Run';
 import { TxStatus } from './ui';
@@ -28,11 +29,11 @@ export function Auctions() {
       ))}
       {error ? (
         <p className="field-error" style={{ padding: '0 20px' }}>
-          {error}
+          {friendlyLoadError(error)}
         </p>
       ) : null}
       {loading && !auctions.length ? <p className="empty">Loading auctions.</p> : null}
-      {!loading && !auctions.length ? <p className="empty">No open auctions right now.</p> : null}
+      {!loading && !error && !auctions.length ? <p className="empty">No open auctions right now.</p> : null}
       <div className="lots" aria-label="Open auctions">
         {auctions.map((a) => (
           <Lot key={`${a.vault}:${a.requestId}`} a={a} me={address} />

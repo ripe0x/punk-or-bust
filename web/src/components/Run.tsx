@@ -9,6 +9,7 @@ import { useNftImage } from '../hooks/useNftImage';
 import { useNow } from '../hooks/useNow';
 import { COLLECTIONS, isPunks } from '../lib/collections';
 import { pullCardsFromEvents, type PullCard, type VaultEvent, type VaultSettings } from '../lib/events';
+import { friendlyLoadError } from '../lib/errors';
 import { floorBar } from '../lib/floor';
 import { formatDuration, formatEth, parseEthInput, windDownReasonLabel } from '../lib/format';
 import { secondsLeft, type OpenAuction } from '../lib/auction';
@@ -38,7 +39,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const auctions = useVaultAuctions(vault);
 
   if (!state) {
-    return <p className="empty">{loading ? 'Loading your run.' : (error ?? 'No run found here.')}</p>;
+    return <p className="empty">{loading ? 'Loading your run.' : (friendlyLoadError(error) ?? 'No run found here.')}</p>;
   }
   const isOwner = !!viewer && viewer.toLowerCase() === state.owner.toLowerCase();
   const discountBps = (discount.data as bigint | undefined) ?? 9_000n;
