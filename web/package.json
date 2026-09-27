@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "abi": "node scripts/abi.mjs"
+    "abi": "node scripts/abi.mjs",
+    "collections": "node scripts/collections.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.11",
