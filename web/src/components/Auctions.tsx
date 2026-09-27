@@ -13,7 +13,7 @@ import { TxStatus } from './ui';
 
 export function Auctions() {
   const { address } = useAccount();
-  const { auctions, credits, vaultCount, loading, error } = useOpenAuctions(address);
+  const { auctions, credits, loading, error } = useOpenAuctions(address);
 
   return (
     <>
@@ -31,7 +31,7 @@ export function Auctions() {
           {error}
         </p>
       ) : null}
-      {loading && !auctions.length ? <p className="empty">Loading auctions across {vaultCount} vaults.</p> : null}
+      {loading && !auctions.length ? <p className="empty">Loading auctions.</p> : null}
       {!loading && !auctions.length ? <p className="empty">No open auctions right now.</p> : null}
       <div className="lots" aria-label="Open auctions">
         {auctions.map((a) => (

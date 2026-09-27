@@ -38,7 +38,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const auctions = useVaultAuctions(vault);
 
   if (!state) {
-    return <p className="empty">{loading ? 'Loading your run.' : (error ?? 'Not a vault.')}</p>;
+    return <p className="empty">{loading ? 'Loading your run.' : (error ?? 'No run found here.')}</p>;
   }
   const isOwner = !!viewer && viewer.toLowerCase() === state.owner.toLowerCase();
   const discountBps = (discount.data as bigint | undefined) ?? 9_000n;

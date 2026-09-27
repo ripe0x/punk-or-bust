@@ -67,6 +67,7 @@ export function Setup({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [tried, setTried] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   // Hydrate from the existing vault's settings once, for the "start a new run" flow.
   const hydrated = useRef(false);
@@ -75,7 +76,7 @@ export function Setup({
     hydrated.current = true;
     setSelected(new Map(events.settings.collections.map((c) => [c.toLowerCase(), c])));
     setKeepTokens(events.settings.tokens);
-    if (events.settings.keepers[0]) setKeeperText(events.settings.keepers[0]);
+    if (events.settings.keepers.length) setKeeperText(events.settings.keepers.join(', '));
     setMore({
       gasCeilingGwei: formatGwei(vaultState.gasCeiling),
       bountyEth: formatEth(vaultState.bountyWei, 6),
@@ -128,12 +129,19 @@ export function Setup({
         value,
       });
       if (!ok || !predicted) return;
+      let settingsFailed = false;
       if (more.privateMode) {
-        if (!(await tx.send('Private mode', { address: predicted, abi: vaultAbi, functionName: 'setPrivateMode', args: [true] }))) return;
+        if (!(await tx.send('Private mode', { address: predicted, abi: vaultAbi, functionName: 'setPrivateMode', args: [true] }))) {
+          settingsFailed = true;
+        }
       }
       if (bountyWei !== DEFAULT_BOUNTY || syncMaxWei !== DEFAULT_SYNC_BOUNTY_MAX) {
-        if (!(await tx.send('Bounties', { address: predicted, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] })))
-          return;
+        if (!(await tx.send('Bounties', { address: predicted, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] }))) {
+          settingsFailed = true;
+        }
+      }
+      if (settingsFailed) {
+        setSettingsError('Your run started, but some settings weren\'t saved. You can set them again under More on your run.');
       }
       onDone();
       return;
@@ -170,7 +178,10 @@ export function Setup({
           return;
       }
       const value = checkedRun.value ?? 0n;
-      if (value === 0n && vaultState.idle === 0n) return;
+      if (value === 0n && vaultState.idle === 0n) {
+        setTried(true);
+        return;
+      }
       const ok = await tx.send('Start run', { address: vault, abi: vaultAbi, functionName: 'startRun', args: [checkedRun.params], value });
       if (ok) onDone();
     }
@@ -183,7 +194,7 @@ export function Setup({
       </div>
     );
   }
-  if (loading || (vault && vaultLoading)) return <p className="empty">Looking up your vault.</p>;
+  if (loading || (vault && vaultLoading)) return <p className="empty">Looking up your run.</p>;
   if (mode === 'blocked') {
     return (
       <div className="section" style={{ paddingTop: 40 }}>
@@ -299,6 +310,9 @@ export function Setup({
           <div className="cta-note">You can stop anytime and get the rest back.</div>
         </div>
         <TxStatus state={tx.state} />
+        {settingsError ? (
+          <p className="field-error">{settingsError}</p>
+        ) : null}
         {tried && Object.keys(errs).length ? (
           <ul className="plain">
             {Object.entries(errs).map(([k, v]) => (

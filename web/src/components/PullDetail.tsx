@@ -45,7 +45,7 @@ export function PullDetail({
     if (listing) rows.push({ k: 'Sold for', v: `${formatEth((listing.value * discountBps) / 10_000n, 4)} ETH` });
     if (fee !== undefined) rows.push({ k: 'Fee', v: `${formatEth(fee, 6)} ETH` });
   } else if (card.status === 'auctioning' && auction) {
-    rows.push({ k: 'Backstop', v: `${formatEth(auction.backstop, 4)} ETH` });
+    rows.push({ k: 'Sell-back price', v: `${formatEth(auction.backstop, 4)} ETH` });
     rows.push({ k: 'Current bid', v: auction.highBid > 0n ? `${formatEth(auction.highBid, 4)} ETH` : 'No bids yet' });
     const left = secondsLeft(auction.deadline, now);
     rows.push({ k: 'Ends in', v: left > 0 ? formatDuration(left) : 'Ended' });
