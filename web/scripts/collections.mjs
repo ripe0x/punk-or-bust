@@ -5,6 +5,39 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Display names where the contract name() differs from the name people know.
+const NAME_OVERRIDES = {
+  "0x0427743df720801825a5c82e0582b1e915e0f750": "0xmons",
+  "0xd92e44ac213b9ebda0178e1523cc0ce177b7fa96": "BEEPLE: EVERYDAYS - THE 2020 COLLECTION",
+  "0xdd012153e008346591153fff28b0dd6724f0c256": "BEEPLE - SPRING/SUMMER COLLECTION 2021",
+  "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d": "Bored Ape Yacht Club",
+  "0xd90829c6c6012e4dde506bd95d7499a04b9a56de": "The Broken Keys",
+  "0x036721e5a769cc48b3189efbb9cce4471e8a48b1": "Checks - VV Originals",
+  "0x1cb1a5e65610aeff2551a50f76a87a7d3fb649c6": "CrypToadz by GREMPLIN",
+  "0x42069abfe407c60cf4ae4112bedead391dba1cdb": "CryptoDickbutts",
+  "0x000000000000003607fce1ac9e043a86675c5c2f": "CryptoPunks",
+  "0x2acab3dea77832c09420663b0e1cb386031ba17b": "Deadfellaz",
+  "0x880af717abba38f31ca21673843636a355fb45f3": "DRIP DROP BY DAVE KRUGMAN",
+  "0x4024c2083f5457874ec489f7c7332680bb86c92b": "Wolf Game Farmers",
+  "0x29f1cbc8eccd64b0ce777f5da45c72c47383a620": "FWAIR PFP",
+  "0x0000ec93127baa929e58e97dd0095a2bfb38ec1d": "Identity MD",
+  "0xe012baf811cf9c05c408e879c399960d1f305903": "Otherside Koda",
+  "0x614917f589593189ac27ac8b81064cbe450c35e3": "Letters by Vinnie Hager",
+  "0x524cab2ec69124574082676e6f654a18df49a048": "Lil Pudgys",
+  "0xff9c1b15b16263c61d017ee9f65c50e4ae0113d7": "Loot (for Adventurers)",
+  "0xd1169e5349d1cb9941f3dcba135c8a4b9eacfdde": "MAX PAIN AND FRENS",
+  "0x79fcdef22feed20eddacbb2587640e45491b757f": "mfers",
+  "0x5af0d9827e0c53e4799bb226655a1de152a425a5": "Milady Maker",
+  "0x60e4d786628fea6478f785a6d7e704777c86a7c6": "Mutant Ape Yacht Club",
+  "0xbd3531da5cf5857e7cfaa92426877b022e612cf8": "Pudgy Penguins",
+  "0x062e691c2054de82f28008a8ccc6d7a1c8ce060d": "Pudgy Rods",
+  "0xd16809c0a7d82c9e7552a01fd608fff90efb564f": "Right Click Share",
+  "0xb852c6b5892256c264cc2c888ea462189154d8d7": "rektguy",
+  "0xdfea2b364db868b1d2601d6b833d74db4de94460": "REMNANTS",
+  "0xc04e0000726ed7c5b9f0045bc0c4806321bc6c65": "ICXN",
+  "0x6efc003d3f3658383f06185503340c2cf27a57b6": "Memeland MVP"
+};
+
 const web = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = join(web, 'src', 'data');
 
@@ -103,11 +136,11 @@ async function fetchCollections() {
     }
     collectionsList.push({
       address: getAddress(address), // Checksum the address
-      name: name || getAddress(address), // Fallback to checksummed address if no name
+      name: NAME_OVERRIDES[address.toLowerCase()] ?? (name || getAddress(address)),
     });
   }
 
-  // Sort by name
+  // Sort by name, case-insensitive
   collectionsList.sort((a, b) => a.name.localeCompare(b.name));
 
   // Write to file

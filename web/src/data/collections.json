@@ -1,7 +1,7 @@
 [
   {
     "address": "0x0427743DF720801825a5c82e0582B1E915E0F750",
-    "name": "0xmons.xyz"
+    "name": "0xmons"
   },
   {
     "address": "0x387C41B0B2F1128dE44dB1Bcf8baad085f26392C",
@@ -20,12 +20,12 @@
     "name": "beef brothko"
   },
   {
-    "address": "0xD92e44Ac213b9EBda0178E1523cc0cE177b7fA96",
-    "name": "Beeple Round 2 Open Edition"
+    "address": "0xdd012153e008346591153fFf28B0DD6724f0C256",
+    "name": "BEEPLE - SPRING/SUMMER COLLECTION 2021"
   },
   {
-    "address": "0xdd012153e008346591153fFf28B0DD6724f0C256",
-    "name": "Beeple Spring Collection"
+    "address": "0xD92e44Ac213b9EBda0178E1523cc0cE177b7fA96",
+    "name": "BEEPLE: EVERYDAYS - THE 2020 COLLECTION"
   },
   {
     "address": "0x75de5Bc35248026faBcb2382Cf322Bc79dFD1A8C",
@@ -37,15 +37,11 @@
   },
   {
     "address": "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D",
-    "name": "BoredApeYachtClub"
-  },
-  {
-    "address": "0xD90829C6C6012E4DdE506BD95d7499A04b9A56de",
-    "name": "BROKEN"
+    "name": "Bored Ape Yacht Club"
   },
   {
     "address": "0x036721e5A769Cc48B3189EFbb9ccE4471E8A48B1",
-    "name": "Checks"
+    "name": "Checks - VV Originals"
   },
   {
     "address": "0x307AF7d28AfEE82092aA95D35644898311CA5360",
@@ -53,19 +49,19 @@
   },
   {
     "address": "0x1CB1A5e65610AEFF2551A50f76a87a7d3fB649C6",
-    "name": "Cryptoadz"
+    "name": "CrypToadz by GREMPLIN"
   },
   {
     "address": "0x42069ABFE407C60cf4ae4112bEDEaD391dBa1cdB",
-    "name": "CryptoDickbutts S3"
+    "name": "CryptoDickbutts"
   },
   {
     "address": "0x000000000000003607fce1aC9e043a86675C5C2F",
-    "name": "CryptoPunks 721"
+    "name": "CryptoPunks"
   },
   {
     "address": "0x2acAb3DEa77832C09420663b0E1cB386031bA17B",
-    "name": "DeadFellaz"
+    "name": "Deadfellaz"
   },
   {
     "address": "0x8a90CAb2b38dba80c64b7734e58Ee1dB38B8992e",
@@ -73,19 +69,15 @@
   },
   {
     "address": "0x880af717abBA38F31Ca21673843636A355Fb45f3",
-    "name": "DRIP DROP // BY DAVE KRUGMAN"
+    "name": "DRIP DROP BY DAVE KRUGMAN"
   },
   {
     "address": "0xd83B6493ecEBC29a6da555935d1b8572A14FC989",
     "name": "Ethos Validators"
   },
   {
-    "address": "0x4024C2083F5457874eC489f7C7332680Bb86c92b",
-    "name": "Farmer"
-  },
-  {
     "address": "0x29f1cBC8eccD64B0cE777f5Da45c72C47383a620",
-    "name": "FWAIR PFPs"
+    "name": "FWAIR PFP"
   },
   {
     "address": "0x1977f9f8653fFd79Fa3198A9c66A0E5EfcaE02e3",
@@ -112,44 +104,48 @@
     "name": "Hashmasks"
   },
   {
-    "address": "0x0000eC93127BAA929E58E97dd0095A2BFb38ec1D",
-    "name": "identity.md"
+    "address": "0xC04E0000726ED7c5b9f0045Bc0c4806321BC6C65",
+    "name": "ICXN"
   },
   {
-    "address": "0xE012Baf811CF9c05c408e879C399960D1f305903",
-    "name": "Koda"
+    "address": "0x0000eC93127BAA929E58E97dd0095A2BFb38ec1D",
+    "name": "Identity MD"
   },
   {
     "address": "0x614917F589593189ac27aC8B81064CBe450C35e3",
-    "name": "Letters"
+    "name": "Letters by Vinnie Hager"
   },
   {
     "address": "0x524cAB2ec69124574082676e6F654a18df49A048",
-    "name": "LilPudgys"
+    "name": "Lil Pudgys"
   },
   {
     "address": "0xFF9C1b15B16263C61d017ee9F65C50e4AE0113D7",
-    "name": "Loot"
+    "name": "Loot (for Adventurers)"
   },
   {
     "address": "0xd1169e5349d1cB9941F3DCbA135C8A4b9eACFDDE",
-    "name": "MAX PAIN AND FRENS OPEN EDITION BY XCOPY"
+    "name": "MAX PAIN AND FRENS"
   },
   {
     "address": "0x7Bd29408f11D2bFC23c34f18275bBf23bB716Bc7",
     "name": "Meebits"
   },
   {
+    "address": "0x6EFc003D3F3658383F06185503340C2Cf27A57b6",
+    "name": "Memeland MVP"
+  },
+  {
     "address": "0x79FCDEF22feeD20eDDacbB2587640e45491b757f",
-    "name": "mfer"
+    "name": "mfers"
   },
   {
     "address": "0x5Af0D9827E0c53E4799BB226655A1de152A425a5",
-    "name": "Milady"
+    "name": "Milady Maker"
   },
   {
     "address": "0x60E4d786628Fea6478F785A6d7e704777c86a7c6",
-    "name": "MutantApeYachtClub"
+    "name": "Mutant Ape Yacht Club"
   },
   {
     "address": "0xd774557b647330C91Bf44cfEAB205095f7E6c367",
@@ -172,16 +168,20 @@
     "name": "Otherdeed Expanded"
   },
   {
+    "address": "0xE012Baf811CF9c05c408e879C399960D1f305903",
+    "name": "Otherside Koda"
+  },
+  {
     "address": "0x4c159520f1117aC58CB5efa1765469cac54DcAAb",
     "name": "pattern recognition"
   },
   {
     "address": "0xBd3531dA5CF5857e7CfAA92426877b022e612cf8",
-    "name": "PudgyPenguins"
+    "name": "Pudgy Penguins"
   },
   {
     "address": "0x062E691c2054dE82F28008a8CCC6d7A1c8ce060D",
-    "name": "PudgyPresent"
+    "name": "Pudgy Rods"
   },
   {
     "address": "0x7a50aBAb1af2c15Fe9780F4F045820294E1a715C",
@@ -192,20 +192,20 @@
     "name": "Quirkies"
   },
   {
-    "address": "0xd16809C0a7d82C9E7552a01Fd608fFF90EFb564f",
-    "name": "RCS"
-  },
-  {
     "address": "0x7A7b26ec72C8497fD068211979199044dEeACC3b",
     "name": "REGULAR ANIMALS"
   },
   {
     "address": "0xB852c6b5892256C264Cc2C888eA462189154D8d7",
-    "name": "Rektguy"
+    "name": "rektguy"
   },
   {
     "address": "0xdFea2b364db868b1D2601D6B833d74Db4de94460",
-    "name": "RΞMNANTS"
+    "name": "REMNANTS"
+  },
+  {
+    "address": "0xd16809C0a7d82C9E7552a01Fd608fFF90EFb564f",
+    "name": "Right Click Share"
   },
   {
     "address": "0x4440732B0D85e2a77DCb2CAEDfd940154241249a",
@@ -224,6 +224,10 @@
     "name": "SMOWL"
   },
   {
+    "address": "0xD90829C6C6012E4DdE506BD95d7499A04b9A56de",
+    "name": "The Broken Keys"
+  },
+  {
     "address": "0xa3AEe8BcE55BEeA1951EF834b99f3Ac60d1ABeeB",
     "name": "VeeFriends"
   },
@@ -236,15 +240,11 @@
     "name": "Wolf Game"
   },
   {
+    "address": "0x4024C2083F5457874eC489f7C7332680Bb86c92b",
+    "name": "Wolf Game Farmers"
+  },
+  {
     "address": "0xd716473C8Eb83A2102deF2B6390D9dfe74b2f580",
     "name": "Wrappers"
-  },
-  {
-    "address": "0xC04E0000726ED7c5b9f0045Bc0c4806321BC6C65",
-    "name": "XCORE"
-  },
-  {
-    "address": "0x6EFc003D3F3658383F06185503340C2Cf27A57b6",
-    "name": "YOU THE REAL MVP"
   }
 ]

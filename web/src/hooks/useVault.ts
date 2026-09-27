@@ -125,7 +125,11 @@ export function useVaultState(vault: Address | undefined) {
   }, [reads.data, bal.data]);
 
   const failed = reads.data?.find((r) => r.status === 'failure');
-  return { state, loading: reads.isLoading, error: reads.error?.message ?? failed?.error?.message };
+  const rawError = reads.error?.message ?? failed?.error?.message;
+  // Calling these reads on an address with no vault contract (no bytecode) reverts with "no
+  // data", which is a data outcome ("this isn't a vault"), not a network problem worth reporting.
+  const error = rawError && !/returned no data/i.test(rawError) ? rawError : undefined;
+  return { state, loading: reads.isLoading, error };
 }
 
 /** Decoded events of one vault, plus what they imply (feed, keep list, keepers, wind-down reason). */

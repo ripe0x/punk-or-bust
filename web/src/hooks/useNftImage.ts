@@ -46,7 +46,13 @@ export function useNftImage(collection: Address | undefined, tokenId: bigint | u
             functionName: 'punkImageSvg',
             args: [Number(tokenId)],
           });
-          url = svg;
+          // The contract's own "data:image/svg+xml;utf8,<markup>" prefix (when present) leaves the
+          // markup unescaped, which breaks as an <img src> the moment it contains a literal '#'
+          // (used in every fill color): the browser reads that as a URL fragment and drops the
+          // rest. Strip any such prefix and re-encode the raw markup properly.
+          const dataUriPrefix = 'data:image/svg+xml;utf8,';
+          const markup = svg.startsWith(dataUriPrefix) ? svg.slice(dataUriPrefix.length) : svg;
+          url = `data:image/svg+xml;utf8,${encodeURIComponent(markup)}`;
         } else {
           const uri = await client.readContract({ address: collection, abi: tokenUriAbi, functionName: 'tokenURI', args: [tokenId] });
           const res = await fetch(resolveUri(uri));

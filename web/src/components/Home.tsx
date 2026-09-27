@@ -5,7 +5,7 @@ import { useNftImage } from '../hooks/useNftImage';
 import { PUNKS_721 } from '../lib/collections';
 import { formatEth } from '../lib/format';
 
-const DECORATIVE_PUNKS = [1042n, 7804n];
+const DECORATIVE_PUNKS = [1042n, 7804n, 2890n, 3100n];
 
 export function Home() {
   const fwa = useFactoryFwa();
@@ -27,14 +27,11 @@ export function Home() {
           <ArrowRight />
         </a>
       </section>
-      <section aria-label="A few NFTs from the pool" className="strip">
-        <div role="img" aria-label="A few NFTs in the pool right now" className="strip-row">
-          <PunkTile id={DECORATIVE_PUNKS[0]} />
-          <div className="strip-tile" style={{ background: '#e9d8b4', display: 'flex', alignItems: 'flex-end', padding: 10, fontSize: 11, color: '#6b5a36' }}>
-            Autoglyphs
-          </div>
-          <PunkTile id={DECORATIVE_PUNKS[1]} />
-          <div className="strip-tile" style={{ background: '#c9d6c1' }} />
+      <section aria-label="The pool" className="strip">
+        <div aria-hidden="true" className="strip-row">
+          {DECORATIVE_PUNKS.map((id) => (
+            <PunkTile key={id.toString()} id={id} />
+          ))}
         </div>
         <div className="strip-stats">
           <div className="strip-stat">

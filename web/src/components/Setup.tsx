@@ -289,9 +289,9 @@ export function Setup({
           </div>
           {spendWei > 0n && quote ? (
             <div className="body">
-              A pull costs about <span className="mono">{formatEthFixed(quote.total, 2)} ETH</span> right now. One you don&apos;t keep sells back for
-              about <span className="mono">{formatEthFixed(sellBack, 2)} ETH</span>, so each pull uses about{' '}
-              <span className="mono">{formatEthFixed(cost > 0n ? cost : 0n, 2)} ETH</span> of your <span className="mono">{formatEthFixed(spendWei, 2)} ETH</span>{' '}
+              A pull costs about <span className="mono">{formatEthFixed(quote.total, 3)} ETH</span> right now. One you don&apos;t keep sells back for
+              about <span className="mono">{formatEthFixed(sellBack, 3)} ETH</span>, so each pull uses about{' '}
+              <span className="mono">{formatEthFixed(cost > 0n ? cost : 0n, 3)} ETH</span> of your <span className="mono">{formatEthFixed(spendWei - stopAt, 2)} ETH</span>{' '}
               limit.
             </div>
           ) : null}
