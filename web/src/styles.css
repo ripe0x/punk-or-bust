@@ -59,6 +59,9 @@ a:hover {
 button {
   font: inherit;
   cursor: pointer;
+  border: 0;
+  background: none;
+  appearance: none;
 }
 button:disabled {
   opacity: 0.45;
@@ -93,6 +96,7 @@ button:disabled {
 .top.with-back {
   padding: 14px 12px;
   gap: 8px;
+  justify-content: flex-start;
 }
 .brand {
   display: flex;
@@ -416,8 +420,14 @@ form.stack {
   align-items: center;
   gap: 10px;
   color: var(--text-3);
+  width: 100%;
+  text-align: left;
 }
-.search input {
+.search:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+label.search input {
   flex-grow: 1;
   height: 44px;
   border: 0;
@@ -426,7 +436,7 @@ form.stack {
   font-size: 16px;
   color: var(--ink);
 }
-.search input:focus {
+label.search input:focus {
   outline: none;
 }
 .list-card {
@@ -532,7 +542,7 @@ form.stack {
   align-items: baseline;
   gap: 6px;
 }
-.budget-input-row input {
+.budget-card .budget-input-row input {
   width: 100%;
   min-width: 0;
   height: 40px;
@@ -544,7 +554,7 @@ form.stack {
   font-weight: 500;
   color: var(--ink);
 }
-.budget-input-row input:focus {
+.budget-card .budget-input-row input:focus {
   outline: none;
 }
 .budget-input-row .unit {
@@ -1375,6 +1385,10 @@ ul.plain li {
 }
 .connect [data-testid='rk-account-button'] div {
   white-space: nowrap;
+}
+.connect [data-testid='rk-connect-button'],
+.connect [data-testid='rk-account-button'] {
+  box-shadow: none;
 }
 
 .empty {

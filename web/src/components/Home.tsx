@@ -9,7 +9,7 @@ const DECORATIVE_PUNKS = [1042n, 7804n];
 
 export function Home() {
   const fwa = useFactoryFwa();
-  const quote = useQuote(fwa);
+  const { data: quote } = useQuote(fwa);
   const count = useReadContract({
     address: fwa,
     abi: fwaAbi,

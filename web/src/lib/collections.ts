@@ -10,6 +10,11 @@ export function isPunks(address: string): boolean {
   return address.toLowerCase() === PUNKS_721.toLowerCase();
 }
 
+/** Display name for a collection: "CryptoPunks" for the CryptoPunks 721 wrapper, its listed name otherwise. */
+export function displayName(collection: { address: string; name: string }): string {
+  return isPunks(collection.address) ? 'CryptoPunks' : collection.name;
+}
+
 /**
  * CryptoPunks first, then by oracle ask price (wei) descending, then collections with no price
  * (missing or 0n) by name. Stable, does not mutate input.

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Address } from 'viem';
 import { useNftImage } from '../hooks/useNftImage';
-import { isPunks, sortCollections, type Collection } from '../lib/collections';
+import { displayName, isPunks, sortCollections, type Collection } from '../lib/collections';
 import { formatEth } from '../lib/format';
 
 export function Picker({
@@ -87,7 +87,7 @@ function CollectionRow({ collection, price, on, onToggle }: { collection: Collec
         {image ? <img src={image} alt="" /> : null}
       </div>
       <div className="coll-info">
-        <div className="coll-name">{collection.name}</div>
+        <div className="coll-name">{displayName(collection)}</div>
         <div className="coll-meta mono">{price !== undefined ? `${formatEth(price, 2)} ETH` : ''}</div>
       </div>
       <input type="checkbox" className="checkbox" checked={on} onChange={onToggle} />

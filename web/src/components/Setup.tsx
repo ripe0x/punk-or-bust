@@ -10,7 +10,7 @@ import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks/useVault';
 import { useNftImage } from '../hooks/useNftImage';
-import { COLLECTIONS, isPunks, sortCollections } from '../lib/collections';
+import { COLLECTIONS, displayName, isPunks, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
 import { formatEth, formatGwei, parseEthInput } from '../lib/format';
@@ -40,7 +40,7 @@ export function Setup({
   const factoryFwa = useFactoryFwa();
   const fwa = vaultState?.fwa ?? factoryFwa;
   const now = useNow(30_000);
-  const quote = useQuote(fwa);
+  const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuote(fwa);
   const tx = useTx();
   const { askWei } = useCollectionPrices(fwa);
 
@@ -95,6 +95,8 @@ export function Setup({
   const spendWei = parseEthInput(spendEth) ?? 0n;
   const range = estimatePullRange(spendWei, BigInt(Math.round(stopPct * 100)), cost);
   const stopAt = (spendWei * BigInt(100 - stopPct)) / 100n;
+  const estimateLoading = quoteLoading || poolStats.isLoading;
+  const estimateError = quoteError || poolStats.isError;
 
   function toggle(addr: Address) {
     setSelected((prev) => {
@@ -234,7 +236,7 @@ export function Setup({
           </button>
           <div className="list-card">
             {sortedTop.map((c) => (
-              <TopRow key={c.address} address={c.address} name={c.name} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
+              <TopRow key={c.address} address={c.address} name={displayName(c)} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
           </div>
           <div className="row-between">
@@ -276,22 +278,28 @@ export function Setup({
 
         <section aria-label="What to expect" className="expect">
           <div className="eyebrow">What to expect</div>
-          <div className="headline">{range ? `About ${range.low} to ${range.high} pulls` : 'Add ETH to see an estimate'}</div>
-          {quote ? (
+          <div className="headline">
+            {spendWei <= 0n
+              ? 'Add ETH to see an estimate'
+              : estimateError
+                ? 'Estimate unavailable right now.'
+                : estimateLoading || !quote || !range
+                  ? 'Reading the pool.'
+                  : `About ${range.low} to ${range.high} pulls`}
+          </div>
+          {spendWei > 0n && quote ? (
             <div className="body">
-              A pull costs about <span className="mono">{formatEth(quote.total, 3)} ETH</span> right now. One you don&apos;t keep sells back for
-              about <span className="mono">{formatEth(sellBack, 3)} ETH</span>, so each pull uses about{' '}
-              <span className="mono">{formatEth(cost > 0n ? cost : 0n, 3)} ETH</span> of your <span className="mono">{formatEth(spendWei, 3)} ETH</span>{' '}
+              A pull costs about <span className="mono">{formatEth(quote.total, 2)} ETH</span> right now. One you don&apos;t keep sells back for
+              about <span className="mono">{formatEth(sellBack, 2)} ETH</span>, so each pull uses about{' '}
+              <span className="mono">{formatEth(cost > 0n ? cost : 0n, 2)} ETH</span> of your <span className="mono">{formatEth(spendWei, 2)} ETH</span>{' '}
               limit.
             </div>
-          ) : (
-            <div className="body">Reading the pool price.</div>
-          )}
+          ) : null}
           <hr />
           <div className="fine">
             Each keep shortens the run, since it isn&apos;t sold back. The run stops at{' '}
             <span className="mono" style={{ color: '#f4f2ec' }}>
-              {formatEth(stopAt, 3)} ETH
+              {formatEth(stopAt, 2)} ETH
             </span>{' '}
             and the rest goes back to your wallet.
           </div>

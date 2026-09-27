@@ -162,7 +162,7 @@ export function useAllVaults() {
   return { vaults, loading: scan.loading, error: scan.error };
 }
 
-/** The live FWA quote for one pull: fee, VRF, total. */
+/** The live FWA quote for one pull: fee, VRF, total, plus whether it is still loading or failed. */
 export function useQuote(fwa: Address | undefined) {
   const q = useReadContract({
     address: fwa,
@@ -171,7 +171,11 @@ export function useQuote(fwa: Address | undefined) {
     query: { enabled: !!fwa, refetchInterval: 30_000 },
   });
   const d = q.data as readonly [bigint, bigint, bigint] | undefined;
-  return d ? { fee: d[0], vrf: d[1], total: d[2] } : undefined;
+  return {
+    data: d ? { fee: d[0], vrf: d[1], total: d[2] } : undefined,
+    isLoading: !!fwa && q.isLoading,
+    error: !!q.error,
+  };
 }
 
 export interface ListingInfo {
