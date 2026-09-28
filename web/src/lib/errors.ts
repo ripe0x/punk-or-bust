@@ -35,3 +35,9 @@ export function errorMessage(err: unknown): string {
   }
   return err instanceof Error ? err.message : String(err);
 }
+
+/** Plain message for a failed data load (an RPC or network error), for showing next to an empty state. */
+export function friendlyLoadError(message: string | null | undefined): string | undefined {
+  if (!message) return undefined;
+  return "Couldn't load this right now. Check your connection and try again.";
+}

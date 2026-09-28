@@ -17,6 +17,19 @@ export function formatEth(wei: bigint, max = 4): string {
   return neg ? `-${out}` : out;
 }
 
+/** Formats wei as ETH with exactly `decimals` fraction digits (rounded), e.g. "1.00" or "0.70". */
+export function formatEthFixed(wei: bigint, decimals = 2): string {
+  const neg = wei < 0n;
+  const abs = neg ? -wei : wei;
+  const unit = 10n ** BigInt(18 - decimals);
+  const rounded = (abs + unit / 2n) / unit;
+  const str = rounded.toString().padStart(decimals + 1, '0');
+  const whole = str.slice(0, str.length - decimals) || '0';
+  const frac = str.slice(str.length - decimals);
+  const out = decimals > 0 ? `${whole}.${frac}` : whole;
+  return neg ? `-${out}` : out;
+}
+
 /** Formats wei as gwei with up to `max` decimals. */
 export function formatGwei(wei: bigint, max = 3): string {
   return trimDecimals(formatUnits(wei, 9), max);

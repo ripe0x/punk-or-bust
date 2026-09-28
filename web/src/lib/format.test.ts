@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseEther } from 'viem';
-import { shortId, formatBps, formatDuration, formatEth, formatGwei, parseEthInput, parseGweiInput, shortAddr } from './format';
+import { shortId, formatBps, formatDuration, formatEth, formatEthFixed, formatGwei, parseEthInput, parseGweiInput, shortAddr } from './format';
 
 describe('formatEth', () => {
   it('trims and truncates', () => {
@@ -11,6 +11,17 @@ describe('formatEth', () => {
   });
   it('marks dust', () => {
     expect(formatEth(1n)).toBe('<0.0001');
+  });
+});
+
+describe('formatEthFixed', () => {
+  it('keeps trailing zeros to a fixed decimal count', () => {
+    expect(formatEthFixed(parseEther('1'), 2)).toBe('1.00');
+    expect(formatEthFixed(parseEther('0.7'), 2)).toBe('0.70');
+    expect(formatEthFixed(0n, 2)).toBe('0.00');
+  });
+  it('rounds', () => {
+    expect(formatEthFixed(parseEther('1.005'), 2)).toBe('1.01');
   });
 });
 

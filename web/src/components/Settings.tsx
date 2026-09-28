@@ -30,7 +30,7 @@ function AutoReturn({ vault, enabled }: { vault: Address; enabled: boolean }) {
     <div className="subsection">
       <h3>Auto-return</h3>
       <p className="small">
-        {enabled ? 'On: when a run finishes, idle ETH goes back to your wallet.' : 'Off: ETH stays in the vault after a run.'}
+        {enabled ? 'On: when a run finishes, idle ETH goes back to your wallet.' : 'Off: ETH stays in the run after a run.'}
       </p>
       <button
         className="btn-small"
@@ -76,8 +76,8 @@ function PrivateMode({ vault, enabled }: { vault: Address; enabled: boolean }) {
       <h3>Private mode</h3>
       <p className="small">
         {enabled
-          ? 'On: only you and approved keepers can request pulls, and only approved keepers are paid. Anyone can still sync and finalize auctions.'
-          : 'Off: anyone can request pulls, sync and finalize auctions within your run limits, paid gas plus the bounty from the vault.'}
+          ? 'On: only you and approved helpers can request pulls, and only approved helpers are paid. Anyone can still sync and finalize auctions.'
+          : 'Off: anyone can request pulls, sync and finalize auctions within your run limits, paid gas plus the bounty from the run.'}
       </p>
       <button
         className="btn-small"
@@ -222,9 +222,9 @@ function Keepers({ vault, keepers, privateMode }: { vault: Address; keepers: Add
   const parsed = parseAddresses(text);
   return (
     <div className="subsection">
-      <h3>Keepers</h3>
+      <h3>Helpers</h3>
       <p className="small">
-        In private mode, approved keepers are the only callers who can request pulls with vault ETH (within your run limits and gas ceiling) and
+        In private mode, approved helpers are the only callers who can request pulls with run ETH (within your run limits and gas ceiling) and
         the only ones paid. In public mode the list has no effect.
       </p>
       {keepers.length === 0 ? (
@@ -237,7 +237,7 @@ function Keepers({ vault, keepers, privateMode }: { vault: Address; keepers: Add
             <button
               className="btn-small btn-ghost"
               disabled={tx.busy}
-              onClick={() => tx.send('Remove keeper', { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [[k], false] })}
+              onClick={() => tx.send('Remove helper', { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [[k], false] })}
             >
               Remove
             </button>
@@ -245,14 +245,14 @@ function Keepers({ vault, keepers, privateMode }: { vault: Address; keepers: Add
         ))}
       </ul>
       <div className="row">
-        <Field label="Add keeper" error={text ? parsed.errors[0] : undefined}>
+        <Field label="Add helper" error={text ? parsed.errors[0] : undefined}>
           <input spellCheck={false} placeholder="0x..." value={text} onChange={(e) => setText(e.target.value)} />
         </Field>
         <button
           className="btn-small"
           disabled={tx.busy || !parsed.addresses.length || !!parsed.errors.length}
           onClick={async () => {
-            if (await tx.send('Add keeper', { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [parsed.addresses, true] })) setText('');
+            if (await tx.send('Add helper', { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [parsed.addresses, true] })) setText('');
           }}
         >
           Add
