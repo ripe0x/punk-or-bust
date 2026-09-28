@@ -16,8 +16,32 @@ const tokenUriAbi = [
   { type: 'function', name: 'tokenURI', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'string' }], stateMutability: 'view' },
 ] as const;
 
-/** In-memory cache so the same NFT is not fetched twice in one session. */
-const cache = new Map<string, string | null>();
+/** Punks bundled in /public/punks: the logo, home strip and list thumbnails load with no RPC call. */
+const STATIC_PUNKS = new Set(['1042', '7804', '2890', '3100']);
+
+/** In-memory cache of successful lookups. Failures are not cached, so a later mount retries. */
+const cache = new Map<string, string>();
+
+/**
+ * punkImageSvg costs about 14M gas per call, and public RPCs drop several of those at once.
+ * Run them one at a time, with a couple of retries.
+ */
+let punkQueue: Promise<unknown> = Promise.resolve();
+function queued<T>(fn: () => Promise<T>): Promise<T> {
+  const run = punkQueue.then(fn, fn);
+  punkQueue = run.catch(() => undefined);
+  return run;
+}
+async function withRetry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 800 * i));
+    }
+  }
+}
 
 /** One NFT's image, or null on any failure. Callers show a tinted placeholder (see `bg`) then. */
 export function useNftImage(collection: Address | undefined, tokenId: bigint | undefined) {
@@ -30,8 +54,13 @@ export function useNftImage(collection: Address | undefined, tokenId: bigint | u
       setImage(undefined);
       return;
     }
-    if (cache.has(key)) {
-      setImage(cache.get(key) ?? null);
+    if (collection && tokenId !== undefined && isPunks(collection) && STATIC_PUNKS.has(tokenId.toString())) {
+      setImage(`/punks/${tokenId}.svg`);
+      return;
+    }
+    const hit = cache.get(key);
+    if (hit) {
+      setImage(hit);
       return;
     }
     if (!collection || tokenId === undefined || !client) return;
@@ -40,12 +69,11 @@ export function useNftImage(collection: Address | undefined, tokenId: bigint | u
       try {
         let url: string | null = null;
         if (isPunks(collection)) {
-          const svg = await client.readContract({
-            address: PUNKS_DATA,
-            abi: punksAbi,
-            functionName: 'punkImageSvg',
-            args: [Number(tokenId)],
-          });
+          const svg = await queued(() =>
+            withRetry(() =>
+              client.readContract({ address: PUNKS_DATA, abi: punksAbi, functionName: 'punkImageSvg', args: [Number(tokenId)] }),
+            ),
+          );
           // The contract's own "data:image/svg+xml;utf8,<markup>" prefix (when present) leaves the
           // markup unescaped, which breaks as an <img src> the moment it contains a literal '#'
           // (used in every fill color): the browser reads that as a URL fragment and drops the
@@ -59,15 +87,10 @@ export function useNftImage(collection: Address | undefined, tokenId: bigint | u
           const json = (await res.json()) as { image?: string };
           url = json.image ? resolveUri(json.image) : null;
         }
-        if (!cancelled) {
-          cache.set(key, url);
-          setImage(url);
-        }
+        if (url) cache.set(key, url);
+        if (!cancelled) setImage(url);
       } catch {
-        if (!cancelled) {
-          cache.set(key, null);
-          setImage(null);
-        }
+        if (!cancelled) setImage(null);
       }
     })();
     return () => {
