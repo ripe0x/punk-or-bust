@@ -1,15 +1,49 @@
-import { useReadContract } from 'wagmi';
+import { useEffect, useRef, useState } from 'react';
+import type { Address } from 'viem';
+import { useAccount, useReadContract } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { fwaAbi } from '../abi/IFWA';
 import { useFactoryFwa, useQuote } from '../hooks/useVault';
 import { useNftImage } from '../hooks/useNftImage';
-import { PUNKS_721 } from '../lib/collections';
+import { imageApi } from '../config';
 import { formatEth } from '../lib/format';
 
-const DECORATIVE_PUNKS = [1042n, 7804n, 2890n, 3100n];
+type PoolItem = { collection: Address; tokenId: bigint };
+
+/** A few NFTs that are in the pool right now, CryptoPunks first. Empty when no image API is set or it fails. */
+function usePoolSample(count: number): PoolItem[] {
+  const [items, setItems] = useState<PoolItem[]>([]);
+  useEffect(() => {
+    if (!imageApi) return;
+    let cancelled = false;
+    fetch(`${imageApi}/live/fwa/mosaic`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { items?: { collection: string; tokenId: string; punk: boolean }[] } | null) => {
+        if (cancelled || !d?.items) return;
+        const sorted = [...d.items.filter((i) => i.punk), ...d.items.filter((i) => !i.punk)];
+        setItems(sorted.slice(0, count).map((i) => ({ collection: i.collection as Address, tokenId: BigInt(i.tokenId) })));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [count]);
+  return items;
+}
 
 export function Home() {
   const fwa = useFactoryFwa();
   const { data: quote } = useQuote(fwa);
+  const pool = usePoolSample(4);
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  const wantsSetup = useRef(false);
+  useEffect(() => {
+    if (isConnected && wantsSetup.current) {
+      wantsSetup.current = false;
+      window.location.hash = '#/setup';
+    }
+  }, [isConnected]);
   const count = useReadContract({
     address: fwa,
     abi: fwaAbi,
@@ -22,17 +56,28 @@ export function Home() {
       <section className="hero">
         <h1>Pull from the pool. Keep what you love. Sell back the rest.</h1>
         <p>Put in some ETH and your run makes the pulls for you. Anything you don&apos;t keep is sold back, and that ETH goes into more pulls.</p>
-        <a className="btn" href="#/setup">
+        <a
+          className="btn"
+          href="#/setup"
+          onClick={(e) => {
+            if (isConnected || !openConnectModal) return;
+            e.preventDefault();
+            wantsSetup.current = true;
+            openConnectModal();
+          }}
+        >
           Start a run
           <ArrowRight />
         </a>
       </section>
       <section aria-label="The pool" className="strip">
-        <div aria-hidden="true" className="strip-row">
-          {DECORATIVE_PUNKS.map((id) => (
-            <PunkTile key={id.toString()} id={id} />
-          ))}
-        </div>
+        {pool.length ? (
+          <div aria-hidden="true" className="strip-row">
+            {pool.map((item) => (
+              <PoolTile key={`${item.collection}:${item.tokenId}`} item={item} />
+            ))}
+          </div>
+        ) : null}
         <div className="strip-stats">
           <div className="strip-stat">
             <div className="value num">{count.data !== undefined ? (count.data as bigint).toLocaleString() : '...'}</div>
@@ -55,8 +100,8 @@ export function Home() {
   );
 }
 
-function PunkTile({ id }: { id: bigint }) {
-  const { image, bg } = useNftImage(PUNKS_721, id);
+function PoolTile({ item }: { item: PoolItem }) {
+  const { image, bg } = useNftImage(item.collection, item.tokenId);
   return (
     <div className="strip-tile" style={{ background: bg }}>
       {image ? <img src={image} alt="" /> : null}

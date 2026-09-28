@@ -25,6 +25,8 @@ export const factoryAddress = addr(env.VITE_FACTORY);
 export const defaultKeeper = addr(env.VITE_DEFAULT_KEEPER);
 
 /** First block to scan for factory and vault events. Set it to the factory deploy block. */
+/** Optional server-side NFT metadata resolver (`<base>/live/nftmeta/:collection/:tokenId`). */
+export const imageApi = env.VITE_IMAGE_API?.trim().replace(/\/+$/, '') || undefined;
 export const fromBlock = /^\d+$/.test(env.VITE_FROM_BLOCK ?? '') ? BigInt(env.VITE_FROM_BLOCK!) : 0n;
 
 export const configProblems: string[] = [

@@ -3,7 +3,10 @@ import { placeholderColor, resolveUri } from './nft';
 
 describe('resolveUri', () => {
   it('maps ipfs:// to a public gateway', () => {
-    expect(resolveUri('ipfs://bafy123/1.json')).toBe('https://ipfs.io/ipfs/bafy123/1.json');
+    expect(resolveUri('ipfs://bafy123/1.json')).toBe('https://ipfs.filebase.io/ipfs/bafy123/1.json');
+  });
+  it('maps ar:// to arweave.net', () => {
+    expect(resolveUri('ar://abc123')).toBe('https://arweave.net/abc123');
   });
   it('passes other schemes through', () => {
     expect(resolveUri('data:application/json;utf8,{}')).toBe('data:application/json;utf8,{}');

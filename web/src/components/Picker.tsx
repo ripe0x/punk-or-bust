@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { Address } from 'viem';
-import { useNftImage } from '../hooks/useNftImage';
-import { displayName, isPunks, sortCollections, type Collection } from '../lib/collections';
-import { formatEth } from '../lib/format';
+import { CollectionThumb } from './CollectionThumb';
+import { collectionMeta, displayName, sortCollections, type Collection } from '../lib/collections';
+import { useCollectionCounts, visibleCollections } from '../hooks/useCollectionCounts';
 
 export function Picker({
-  collections,
+  collections: all,
   askWei,
   selected,
   onToggle,
@@ -17,6 +17,8 @@ export function Picker({
   onToggle: (address: Address) => void;
   onClose: () => void;
 }) {
+  const res = useCollectionCounts();
+  const collections = useMemo(() => visibleCollections(all, res), [all, res]);
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'all' | 'picked'>('all');
 
@@ -65,7 +67,7 @@ export function Picker({
       <div className="sheet-list">
         <div className="list-card">
           {filtered.map((c) => (
-            <CollectionRow key={c.address} collection={c} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => onToggle(c.address)} />
+            <CollectionRow key={c.address} collection={c} count={res.loaded ? res.counts[c.address.toLowerCase()]?.count : undefined} sample={res.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => onToggle(c.address)} />
           ))}
           {filtered.length === 0 ? <p className="empty">No collections match.</p> : null}
         </div>
@@ -79,16 +81,13 @@ export function Picker({
   );
 }
 
-function CollectionRow({ collection, price, on, onToggle }: { collection: Collection; price: bigint | undefined; on: boolean; onToggle: () => void }) {
-  const { image, bg } = useNftImage(collection.address, isPunks(collection.address) ? 1042n : undefined);
+function CollectionRow({ collection, count, sample, price, on, onToggle }: { collection: Collection; count: number | undefined; sample?: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
   return (
     <label className="coll-row">
-      <div className="coll-thumb" style={{ background: bg }}>
-        {image ? <img src={image} alt="" /> : null}
-      </div>
+      <CollectionThumb address={collection.address} image={collection.image} sampleTokenId={sample} />
       <div className="coll-info">
         <div className="coll-name">{displayName(collection)}</div>
-        <div className="coll-meta mono">{price !== undefined ? `${formatEth(price, 2)} ETH` : ''}</div>
+        <div className="coll-meta mono">{collectionMeta(count, price)}</div>
       </div>
       <input type="checkbox" className="checkbox" checked={on} onChange={onToggle} />
     </label>

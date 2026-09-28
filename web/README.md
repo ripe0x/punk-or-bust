@@ -15,6 +15,7 @@ never committed):
 | `VITE_CHAIN_ID` | Chain id, default `1` (mainnet); set `31337` or another id only on purpose |
 | `VITE_DEFAULT_KEEPER` | Keeper address prefilled in the create form (optional) |
 | `VITE_FROM_BLOCK` | First block to scan for events; set it to the factory deploy block |
+| `VITE_IMAGE_API` | Optional. Base URL of a server that answers `/live/nftmeta/:collection/:tokenId` with `{ image }`; used before reading metadata from the browser |
 | `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Cloud project id (optional). When set, the RainbowKit modal lists its default wallets (MetaMask, Rainbow, Coinbase, WalletConnect and more). When unset, only browser wallets that need no project id are offered and the console logs one warning |
 
 `.env.example` lists every var. `VITE_RPC_URL` is also the wallet transport. All values ship in the

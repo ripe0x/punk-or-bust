@@ -1,6 +1,7 @@
 /** Resolves a tokenURI/image URI: passes data: URIs through, maps ipfs:// to a public gateway. */
 export function resolveUri(uri: string): string {
-  if (uri.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${uri.slice('ipfs://'.length)}`;
+  if (uri.startsWith('ipfs://')) return `https://ipfs.filebase.io/ipfs/${uri.slice('ipfs://'.length)}`;
+  if (uri.startsWith('ar://')) return `https://arweave.net/${uri.slice('ar://'.length)}`;
   return uri;
 }
 
