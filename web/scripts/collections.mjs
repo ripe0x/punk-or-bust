@@ -51,7 +51,7 @@ const client = createPublicClient({
 });
 
 const IPFS_GATEWAYS = [
-  'https://cloudflare-ipfs.com/ipfs/',
+  'https://ipfs.filebase.io/ipfs/',
   'https://dweb.link/ipfs/',
   'https://ipfs.io/ipfs/',
   'https://nftstorage.link/ipfs/',
