@@ -50,6 +50,93 @@ const client = createPublicClient({
   transport: http(RPC),
 });
 
+const IPFS_GATEWAYS = [
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://dweb.link/ipfs/',
+  'https://ipfs.io/ipfs/',
+  'https://nftstorage.link/ipfs/',
+];
+const SAMPLE_IDS = [1n, 0n, 2n, 10n];
+const MAX_DATA_IMAGE = 20 * 1024;
+const PUNKS_721 = '0x000000000000003607fce1ac9e043a86675c5c2f';
+const tokenUriAbi = [
+  { type: 'function', name: 'tokenURI', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'string' }], stateMutability: 'view' },
+];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchWithTimeout(url, ms = 8000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { signal: ctl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// GET a URL with retry/backoff on 429 and transient errors; returns parsed JSON or null.
+async function fetchJson(url) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url);
+      if (res.status === 429) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
+      }
+      if (!res.ok) return null;
+      return JSON.parse(await res.text());
+    } catch {
+      await sleep(500 * (attempt + 1));
+    }
+  }
+  return null;
+}
+
+function parseDataJson(uri) {
+  const m = /^data:([^,]*?),(.*)$/s.exec(uri);
+  if (!m) return null;
+  try {
+    const body = /;base64/i.test(m[1]) ? Buffer.from(m[2], 'base64').toString('utf8') : decodeURIComponent(m[2]);
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+async function loadMetadata(uri) {
+  uri = uri.trim();
+  if (uri.startsWith('data:')) return parseDataJson(uri);
+  if (uri.startsWith('ar://')) return fetchJson(`https://arweave.net/${uri.slice(5)}`);
+  if (uri.startsWith('ipfs://')) {
+    const path = uri.slice(7).replace(/^ipfs\//, '');
+    for (const gw of IPFS_GATEWAYS) {
+      const json = await fetchJson(gw + path);
+      if (json) return json;
+    }
+    return null;
+  }
+  if (/^https?:\/\//.test(uri)) return fetchJson(uri);
+  return null;
+}
+
+async function sampleImage(address) {
+  let uri = null;
+  for (const id of SAMPLE_IDS) {
+    try {
+      uri = await client.readContract({ address, abi: tokenUriAbi, functionName: 'tokenURI', args: [id] });
+      if (uri) break;
+    } catch {
+      // try next id
+    }
+  }
+  if (!uri) return null;
+  const meta = await loadMetadata(uri);
+  const image = meta && (meta.image ?? meta.image_url);
+  if (typeof image !== 'string' || !image) return null;
+  if (image.startsWith('data:') && image.length > MAX_DATA_IMAGE) return null;
+  return image;
+}
+
 async function fetchCollections() {
   console.log('Fetching CollectionWhitelistSet logs...');
 
@@ -134,10 +221,17 @@ async function fetchCollections() {
     } catch (e) {
       // Fallback to address if name() fails
     }
-    collectionsList.push({
+    const entry = {
       address: getAddress(address), // Checksum the address
       name: NAME_OVERRIDES[address.toLowerCase()] ?? (name || getAddress(address)),
-    });
+    };
+    if (address.toLowerCase() !== PUNKS_721) {
+      const image = await sampleImage(address).catch(() => null);
+      if (image) entry.image = image;
+      console.log(`${entry.name}: ${image ? image.slice(0, 60) : 'no image'}`);
+      await sleep(250);
+    }
+    collectionsList.push(entry);
   }
 
   // Sort by name, case-insensitive

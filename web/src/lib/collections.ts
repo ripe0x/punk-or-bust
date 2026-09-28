@@ -1,6 +1,6 @@
 import list from '../data/collections.json';
 
-export type Collection = { address: `0x${string}`; name: string };
+export type Collection = { address: `0x${string}`; name: string; image?: string };
 
 export const COLLECTIONS: Collection[] = list as Collection[];
 

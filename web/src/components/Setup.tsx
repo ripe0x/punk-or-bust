@@ -9,8 +9,8 @@ import { useCollectionPrices } from '../hooks/useCollectionPrices';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks/useVault';
-import { useNftImage } from '../hooks/useNftImage';
-import { COLLECTIONS, displayName, isPunks, sortCollections } from '../lib/collections';
+import { CollectionThumb } from './CollectionThumb';
+import { COLLECTIONS, displayName, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
 import { formatEth, formatEthFixed, formatGwei, parseEthInput } from '../lib/format';
@@ -236,7 +236,7 @@ export function Setup({
           </button>
           <div className="list-card">
             {sortedTop.map((c) => (
-              <TopRow key={c.address} address={c.address} name={displayName(c)} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
+              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
           </div>
           <div className="row-between">
@@ -350,13 +350,10 @@ export function Setup({
   );
 }
 
-function TopRow({ address, name, price, on, onToggle }: { address: Address; name: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
-  const { image, bg } = useNftImage(address, isPunks(address) ? 1042n : undefined);
+function TopRow({ address, image, name, price, on, onToggle }: { address: Address; image?: string; name: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
   return (
     <label className="coll-row">
-      <div className="coll-thumb" style={{ background: bg }}>
-        {image ? <img src={image} alt="" /> : null}
-      </div>
+      <CollectionThumb address={address} image={image} />
       <div className="coll-info">
         <div className="coll-name">{name}</div>
         <div className="coll-meta mono">{price !== undefined ? `${formatEth(price, 2)} ETH` : ''}</div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Address } from 'viem';
-import { useNftImage } from '../hooks/useNftImage';
-import { displayName, isPunks, sortCollections, type Collection } from '../lib/collections';
+import { CollectionThumb } from './CollectionThumb';
+import { displayName, sortCollections, type Collection } from '../lib/collections';
 import { formatEth } from '../lib/format';
 
 export function Picker({
@@ -80,12 +80,9 @@ export function Picker({
 }
 
 function CollectionRow({ collection, price, on, onToggle }: { collection: Collection; price: bigint | undefined; on: boolean; onToggle: () => void }) {
-  const { image, bg } = useNftImage(collection.address, isPunks(collection.address) ? 1042n : undefined);
   return (
     <label className="coll-row">
-      <div className="coll-thumb" style={{ background: bg }}>
-        {image ? <img src={image} alt="" /> : null}
-      </div>
+      <CollectionThumb address={collection.address} image={collection.image} />
       <div className="coll-info">
         <div className="coll-name">{displayName(collection)}</div>
         <div className="coll-meta mono">{price !== undefined ? `${formatEth(price, 2)} ETH` : ''}</div>
