@@ -2,7 +2,8 @@
 # repo builds correctly without any base-directory setting in the Netlify UI.
 # Build env (Netlify UI, not this file): VITE_RPC_URL, VITE_FACTORY, VITE_FROM_BLOCK,
 # optional VITE_CHAIN_ID (default 1), VITE_DEFAULT_KEEPER, VITE_WALLETCONNECT_PROJECT_ID and VITE_IMAGE_API.
-# VITE_RPC_URL ships in the public bundle: use a public or domain-restricted endpoint.
+# VITE_RPC_URL ships in the public bundle: use a public or domain-restricted endpoint. It must
+# serve eth_getLogs from VITE_FROM_BLOCK (archive); pruned public nodes drop older history.
 # Routes are hash routes, so no SPA redirect.
 
 [build]
