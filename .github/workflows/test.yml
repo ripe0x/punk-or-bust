@@ -25,7 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Archive node: every fork suite pins a block, which a pruned node stops serving within minutes.
-      MAINNET_RPC_URL: https://eth.drpc.org
+      # The free drpc tier failed intermittently (HTTP 500, missing methods); Tenderly serves archive reads.
+      MAINNET_RPC_URL: https://mainnet.gateway.tenderly.co
     steps:
       - uses: actions/checkout@v4
         with:
