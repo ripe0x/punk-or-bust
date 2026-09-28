@@ -3,6 +3,7 @@ import { usePublicClient } from 'wagmi';
 import type { Address } from 'viem';
 import { isPunks } from '../lib/collections';
 import { placeholderColor, resolveUri } from '../lib/nft';
+import { imageApi } from '../config';
 
 /** CryptopunksData: on-chain SVGs for CryptoPunks, background per the design. */
 const PUNKS_DATA = '0x16F5A35647D6F03D5D3da7b35409D65ba03aF3B2' as const;
@@ -82,6 +83,20 @@ export function useNftImage(collection: Address | undefined, tokenId: bigint | u
           const markup = svg.startsWith(dataUriPrefix) ? svg.slice(dataUriPrefix.length) : svg;
           url = `data:image/svg+xml;utf8,${encodeURIComponent(markup)}`;
         } else {
+          // Many metadata hosts block browser requests (no CORS), so ask the server-side resolver first.
+          if (imageApi) {
+            try {
+              const res = await fetch(`${imageApi}/live/nftmeta/${collection.toLowerCase()}/${tokenId}`);
+              if (res.ok) {
+                const meta = (await res.json()) as { image?: string | null };
+                if (meta.image) url = resolveUri(meta.image);
+              }
+            } catch {
+              // Fall through to the direct read below.
+            }
+          }
+        }
+        if (!url && !isPunks(collection)) {
           const uri = await client.readContract({ address: collection, abi: tokenUriAbi, functionName: 'tokenURI', args: [tokenId] });
           const res = await fetch(resolveUri(uri));
           const json = (await res.json()) as { image?: string };
