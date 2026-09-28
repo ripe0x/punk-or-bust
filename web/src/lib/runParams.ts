@@ -32,11 +32,20 @@ export function defaultRunForm(nowSec: number): RunForm {
   return {
     amountEth: '',
     drawdownPct: 25,
-    maxPullCostEth: '',
+    maxPullCostEth: '0.15',
     deadline: unixToLocalInput(nowSec + 7 * 86400),
     maxPulls: '100',
     stopAfterKeeps: '0',
   };
+}
+
+const MIN_MAX_PULL_COST = 150_000_000_000_000_000n; // 0.15 ETH
+const CENT_ETH = 10_000_000_000_000_000n; // 0.01 ETH
+
+/** Default "most to pay per pull": the larger of 0.15 ETH and twice the current pull price, rounded up to 0.01 ETH. */
+export function defaultMaxPullCostWei(pullPriceWei: bigint): bigint {
+  const want = pullPriceWei * 2n > MIN_MAX_PULL_COST ? pullPriceWei * 2n : MIN_MAX_PULL_COST;
+  return ((want + CENT_ETH - 1n) / CENT_ETH) * CENT_ETH;
 }
 
 /** Local datetime-local string to unix seconds. */

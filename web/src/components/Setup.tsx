@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReadContracts } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { Address } from 'viem';
 import { factoryAbi } from '../abi/VaultFactory';
 import { vaultAbi } from '../abi/Vault';
@@ -10,12 +11,13 @@ import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
 import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks/useVault';
 import { CollectionThumb } from './CollectionThumb';
-import { COLLECTIONS, displayName, sortCollections } from '../lib/collections';
+import { useCollectionCounts, visibleCollections } from '../hooks/useCollectionCounts';
+import { COLLECTIONS, collectionMeta, displayName, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
 import { formatEth, formatEthFixed, formatGwei, parseEthInput } from '../lib/format';
 import { diffKeepList, type KeepToken } from '../lib/keepList';
-import { checkGasCeiling, checkRunForm, defaultRunForm, parseAddresses, type RunForm } from '../lib/runParams';
+import { checkGasCeiling, checkRunForm, defaultMaxPullCostWei, defaultRunForm, parseAddresses, type RunForm } from '../lib/runParams';
 import { Picker } from './Picker';
 import { defaultMoreForm, SetupMore, type MoreForm } from './SetupMore';
 import { TxStatus } from './ui';
@@ -43,6 +45,8 @@ export function Setup({
   const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuote(fwa);
   const tx = useTx();
   const { askWei } = useCollectionPrices(fwa);
+  const counts = useCollectionCounts();
+  const { openConnectModal } = useConnectModal();
 
   const poolStats = useReadContracts({
     contracts: fwa
@@ -85,7 +89,17 @@ export function Setup({
     });
   }, [mode, vaultState, events.settings]);
 
-  const sortedTop = useMemo(() => sortCollections(COLLECTIONS, askWei).slice(0, TOP_N), [askWei]);
+  // Prefill the max pull cost once the pull price is known, unless the user already typed one.
+  const maxPullTouched = useRef(false);
+  const quoteTotal = quote?.total;
+  useEffect(() => {
+    if (quoteTotal === undefined || maxPullTouched.current) return;
+    maxPullTouched.current = true;
+    setRun((r) => (r.maxPullCostEth.trim() === '' ? { ...r, maxPullCostEth: formatEth(defaultMaxPullCostWei(quoteTotal), 2) } : r));
+  }, [quoteTotal]);
+
+  const shown = useMemo(() => visibleCollections(COLLECTIONS, counts), [counts]);
+  const sortedTop = useMemo(() => sortCollections(shown, askWei).slice(0, TOP_N), [shown, askWei]);
 
   const weightedBackingTotal = (poolStats.data?.[0]?.result as bigint | undefined) ?? 0n;
   const totalWeight = (poolStats.data?.[1]?.result as bigint | undefined) ?? 0n;
@@ -113,6 +127,10 @@ export function Setup({
   const gasCheck = checkGasCeiling(more.gasCeilingGwei);
 
   async function submit() {
+    if (!isConnected) {
+      openConnectModal?.();
+      return;
+    }
     setTried(true);
     if (!checkedRun.params || gasCheck.wei === null) return;
     const collections = [...selected.values()];
@@ -186,14 +204,7 @@ export function Setup({
     }
   }
 
-  if (!isConnected) {
-    return (
-      <div className="section" style={{ paddingTop: 40 }}>
-        <p className="lede">Connect a wallet to set up a run.</p>
-      </div>
-    );
-  }
-  if (loading || (vault && vaultLoading)) return <p className="empty">Looking up your run.</p>;
+  if (isConnected && (loading || (vault && vaultLoading))) return <p className="empty">Looking up your run.</p>;
   if (mode === 'blocked') {
     return (
       <div className="section" style={{ paddingTop: 40 }}>
@@ -230,18 +241,18 @@ export function Setup({
             What do you want to keep?
           </legend>
           <p className="form-lede">Pull one of these and it goes to your wallet. Everything else is sold back to pay for more pulls.</p>
-          <button type="button" className="search" onClick={() => setPickerOpen(true)} aria-label={`Search ${COLLECTIONS.length} collections`}>
+          <button type="button" className="search" onClick={() => setPickerOpen(true)} aria-label={`Search ${shown.length} collections`}>
             <SearchIcon />
-            <span style={{ color: 'var(--text-3)', fontSize: 16 }}>Search {COLLECTIONS.length} collections</span>
+            <span style={{ color: 'var(--text-3)', fontSize: 16 }}>Search {shown.length} collections</span>
           </button>
           <div className="list-card">
             {sortedTop.map((c) => (
-              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
+              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
           </div>
           <div className="row-between">
             <button type="button" className="btn-link" onClick={() => setPickerOpen(true)}>
-              Show all {COLLECTIONS.length} collections
+              Show all {shown.length} collections
             </button>
             <span className="count-pill">{selected.size} picked</span>
           </div>
@@ -337,7 +348,10 @@ export function Setup({
       {moreOpen ? (
         <SetupMore
           run={run}
-          onRun={setRun}
+          onRun={(f) => {
+            maxPullTouched.current = true;
+            setRun(f);
+          }}
           more={more}
           onMore={setMore}
           keepTokens={keepTokens}
@@ -350,13 +364,13 @@ export function Setup({
   );
 }
 
-function TopRow({ address, image, name, price, on, onToggle }: { address: Address; image?: string; name: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
+function TopRow({ address, image, name, count, sample, price, on, onToggle }: { address: Address; image?: string; name: string; count: number | undefined; sample?: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
   return (
     <label className="coll-row">
-      <CollectionThumb address={address} image={image} />
+      <CollectionThumb address={address} image={image} sampleTokenId={sample} />
       <div className="coll-info">
         <div className="coll-name">{name}</div>
-        <div className="coll-meta mono">{price !== undefined ? `${formatEth(price, 2)} ETH` : ''}</div>
+        <div className="coll-meta mono">{collectionMeta(count, price)}</div>
       </div>
       <input type="checkbox" className="checkbox" checked={on} onChange={onToggle} />
     </label>

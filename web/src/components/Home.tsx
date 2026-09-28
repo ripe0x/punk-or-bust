@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Address } from 'viem';
-import { useReadContract } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { fwaAbi } from '../abi/IFWA';
 import { useFactoryFwa, useQuote } from '../hooks/useVault';
 import { useNftImage } from '../hooks/useNftImage';
@@ -34,6 +35,15 @@ export function Home() {
   const fwa = useFactoryFwa();
   const { data: quote } = useQuote(fwa);
   const pool = usePoolSample(4);
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  const wantsSetup = useRef(false);
+  useEffect(() => {
+    if (isConnected && wantsSetup.current) {
+      wantsSetup.current = false;
+      window.location.hash = '#/setup';
+    }
+  }, [isConnected]);
   const count = useReadContract({
     address: fwa,
     abi: fwaAbi,
@@ -46,7 +56,16 @@ export function Home() {
       <section className="hero">
         <h1>Pull from the pool. Keep what you love. Sell back the rest.</h1>
         <p>Put in some ETH and your run makes the pulls for you. Anything you don&apos;t keep is sold back, and that ETH goes into more pulls.</p>
-        <a className="btn" href="#/setup">
+        <a
+          className="btn"
+          href="#/setup"
+          onClick={(e) => {
+            if (isConnected || !openConnectModal) return;
+            e.preventDefault();
+            wantsSetup.current = true;
+            openConnectModal();
+          }}
+        >
           Start a run
           <ArrowRight />
         </a>
