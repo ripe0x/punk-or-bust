@@ -66,15 +66,9 @@ up() {
   echo "== deploy factory (sender $OWNER)"
   DEPLOY_RECORD="$RECORD" DEPLOY_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo local)" \
     forge script "$SCRIPT" --rpc-url "$RPC" --broadcast --unlocked --sender "$OWNER" --slow
-  local factory rv rv_owner lib
+  local factory rv rv_owner
   factory="$(jq -r .factory "$RECORD")"
   [ "$(cast code "$factory" --rpc-url "$RPC")" != "0x" ] || die "no factory code"
-
-  # The FwaClientLib address is deterministic, so on a mainnet fork it already holds the version from
-  # the recorded mainnet deploy, and forge skips deploying the current one. Overwrite it with this
-  # build so the vaults run against current library code (for example settleForEth).
-  lib="$(jq -r .fwaClientLib "$RECORD")"
-  cast rpc anvil_setCode "$lib" "$(jq -r '.deployedBytecode.object' out/FwaClientLib.sol/FwaClientLib.json)" --rpc-url "$RPC" >/dev/null
 
   echo "== allowlist the factory as a series (reward vault owner)"
   rv="$(jq -r .rewardVault "$RECORD")"
