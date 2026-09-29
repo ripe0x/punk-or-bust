@@ -205,6 +205,25 @@ export function useListings(fwa: Address | undefined, listingIds: bigint[]) {
   }, [reads.data, listingIds]);
 }
 
+/**
+ * FWA acquisition status for each pending pull, keyed by request id string: 1 waiting for the draw,
+ * 2 or 5 drawn and awaiting the vault's sync. Lets the pending card show which stage it is in.
+ */
+export function useAcquisitionStatus(fwa: Address | undefined, requestIds: bigint[]) {
+  const reads = useReadContracts({
+    contracts: fwa ? requestIds.map((id) => ({ address: fwa, abi: fwaAbi, functionName: 'acquisitions', args: [id] }) as const) : [],
+    query: { enabled: !!fwa && requestIds.length > 0, refetchInterval: POLL },
+  });
+  return useMemo(() => {
+    const out: Record<string, number> = {};
+    requestIds.forEach((id, i) => {
+      const r = reads.data?.[i]?.result as readonly [Address, bigint, bigint, bigint, number] | undefined;
+      if (r) out[id.toString()] = Number(r[4]);
+    });
+    return out;
+  }, [reads.data, requestIds]);
+}
+
 /** Open miss auctions for one vault, keyed by request id string. */
 export function useVaultAuctions(vault: Address | undefined) {
   const ids = useReadContract({

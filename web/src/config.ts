@@ -14,7 +14,7 @@ export const chain: Chain =
   known ??
   defineChain({
     id: chainId,
-    name: `Chain ${chainId}`,
+    name: chainId === 31337 || chainId === 31338 ? 'Punk or Bust (local)' : `Chain ${chainId}`,
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: rpcUrl ? [rpcUrl] : [] } },
   });

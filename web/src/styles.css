@@ -572,6 +572,47 @@ label.search input:focus {
   font-size: 15px;
   color: var(--text-3);
 }
+.maxloss {
+  justify-content: space-between;
+}
+.maxloss-num {
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 40px;
+  color: var(--ink);
+}
+.maxloss .slider {
+  margin-top: 8px;
+}
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 0;
+}
+.slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 0;
+}
+.slider:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
 
 .expect {
   padding: 20px;
@@ -877,6 +918,57 @@ label.search input:focus {
 }
 .pull-thumb.pending {
   background: repeating-linear-gradient(135deg, var(--row) 0 8px, #f7f5f0 8px 16px);
+  position: relative;
+}
+.pull-thumb.pending::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.6) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: pull-sweep 1.4s ease-in-out infinite;
+}
+@keyframes pull-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.pull-status.pending-status {
+  animation: pull-pulse 1.5s ease-in-out infinite;
+}
+.pull-status.pending-status .dots::after {
+  content: '';
+  animation: pull-dots 1.5s steps(1, end) infinite;
+}
+@keyframes pull-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes pull-dots {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-thumb.pending::after,
+  .pull-status.pending-status,
+  .pull-status.pending-status .dots::after {
+    animation: none;
+  }
 }
 .pull-body {
   display: flex;
@@ -905,6 +997,82 @@ label.search input:focus {
 }
 .pull-status.auctioning {
   color: var(--text-2);
+}
+.pull-sort {
+  display: inline-flex;
+  gap: 4px;
+}
+.pull-sort button {
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pull-sort button.on {
+  background: var(--ink);
+  color: var(--ground);
+}
+.pull-sub {
+  font-size: 13px;
+  color: var(--text-3);
+  font-family: 'Geist Mono', monospace;
+}
+.pull-progress {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.pull-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ink);
+  transition: width 0.4s ease;
+  position: relative;
+}
+.pull-progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 20%, rgba(255, 255, 255, 0.5) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: pull-sweep 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-progress-fill::after {
+    animation: none;
+  }
+}
+.pull-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.pull-val {
+  font-family: 'Geist Mono', monospace;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pull-pnl {
+  font-family: 'Geist Mono', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pull-pnl.pos {
+  color: var(--accent-text);
+}
+.pull-pnl.neg {
+  color: var(--accent-text-strong);
 }
 .pull-amount {
   font-family: 'Geist Mono', monospace;
@@ -1328,8 +1496,13 @@ label.check {
 }
 
 .tx {
-  font-size: 0.85rem;
-  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin: 4px 0 48px;
+}
+.tx strong {
+  color: var(--ink);
 }
 .tx-error {
   color: var(--accent-text-strong);
@@ -1400,6 +1573,15 @@ ul.plain li {
 .connect [data-testid='rk-connect-button'],
 .connect [data-testid='rk-account-button'] {
   box-shadow: none;
+  height: 40px;
+  padding: 0 12px;
+}
+/* RainbowKit sizes its button label from these; shrink to fit the nav row. */
+.connect [data-testid='rk-connect-button'],
+.connect [data-testid='rk-account-button'],
+.connect [data-testid='rk-account-button'] * {
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .empty {
