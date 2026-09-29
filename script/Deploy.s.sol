@@ -41,7 +41,7 @@ interface IDeployRewardVault {
 ///         deploys it first through the CREATE2 deployer (a deterministic address) unless it already
 ///         has code, and links it.
 ///
-///   run()          preflight, deploy, postflight, record. Chain 1 only.
+///   run()          preflight, deploy, postflight, record. Chain 1, or 31337 for a mainnet fork.
 ///   smoke(factory) creates the sender's vault from `factory`, reads it back, then stops it and
 ///                  withdraws. Used by the dry run on a fork; never part of the mainnet deploy.
 ///
@@ -64,6 +64,9 @@ contract Deploy is Script {
     address internal constant VRF_SERVICE = 0xCACBd874e24B533935176154E990Bf710F56693A;
     address internal constant PURCHASE_NOTIFIER = 0x612dF3a344990F8E53499ec1bC79Be63cFa496D0;
 
+    /// @dev Local anvil ids (31337 default, 31338 to run beside another 31337 fork). Accepted only
+    ///      when the pool preflight passes, so either is reachable solely on a mainnet fork that
+    ///      carries the real FWA V2 code.
     string internal constant POOL_REF = "refs/fwa-v2/FWAV2.json";
     string internal constant PENDING_RECORD = "deployments/pending.json";
 
@@ -75,7 +78,10 @@ contract Deploy is Script {
     }
 
     function run() external returns (VaultFactory factory) {
-        require(block.chainid == 1, "chain id is not 1");
+        require(
+            block.chainid == 1 || block.chainid == 31_337 || block.chainid == 31_338,
+            "chain id is not mainnet or a local fork"
+        );
         Config memory c = _config();
         _preflight(c);
 
@@ -91,7 +97,10 @@ contract Deploy is Script {
     }
 
     function smoke(VaultFactory factory) external returns (Vault vault) {
-        require(block.chainid == 1, "chain id is not 1");
+        require(
+            block.chainid == 1 || block.chainid == 31_337 || block.chainid == 31_338,
+            "chain id is not mainnet or a local fork"
+        );
         address owner = _sender();
         require(factory.vaultOf(owner) == address(0), "sender already has a vault");
         Vault.RunParams memory params = Vault.RunParams({
