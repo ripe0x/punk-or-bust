@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useReadContracts } from 'wagmi';
+import { useAccount, useBalance, useReadContracts, useSwitchChain } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { Address } from 'viem';
 import { factoryAbi } from '../abi/VaultFactory';
 import { vaultAbi } from '../abi/Vault';
 import { fwaAbi } from '../abi/IFWA';
-import { defaultKeeper, factoryAddress } from '../config';
+import { chain, defaultKeeper, factoryAddress } from '../config';
 import { useCollectionPrices } from '../hooks/useCollectionPrices';
 import { useNow } from '../hooks/useNow';
 import { useTx } from '../hooks/useTx';
@@ -47,6 +47,10 @@ export function Setup({
   const { askWei } = useCollectionPrices(fwa);
   const counts = useCollectionCounts();
   const { openConnectModal } = useConnectModal();
+  const { address, chainId: walletChainId } = useAccount();
+  const { switchChainAsync, isPending: switching } = useSwitchChain();
+  const wrongNetwork = isConnected && walletChainId !== undefined && walletChainId !== chain.id;
+  const { data: walletBalance } = useBalance({ address, query: { enabled: isConnected, refetchInterval: 10_000 } });
 
   const poolStats = useReadContracts({
     contracts: fwa
@@ -111,6 +115,8 @@ export function Setup({
   const stopAt = (spendWei * BigInt(100 - stopPct)) / 100n;
   const estimateLoading = quoteLoading || poolStats.isLoading;
   const estimateError = quoteError || poolStats.isError;
+  // A forked wallet only holds its real mainnet balance; block the send if the spend alone exceeds it.
+  const insufficientFunds = isConnected && !wrongNetwork && !!walletBalance && spendWei > 0n && spendWei >= walletBalance.value;
 
   function toggle(addr: Address) {
     setSelected((prev) => {
@@ -271,18 +277,23 @@ export function Setup({
                 <span className="unit">ETH</span>
               </span>
             </label>
-            <label className="budget-card">
-              <span className="cap">Stop if I&apos;m down</span>
+            <div className="budget-card maxloss">
+              <span className="cap">Most you&apos;re willing to lose</span>
               <span className="budget-input-row">
-                <input
-                  inputMode="numeric"
-                  aria-label="Stop when down by, percent"
-                  value={stopPct}
-                  onChange={(e) => setStopPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                />
-                <span className="unit">%</span>
+                <span className="maxloss-num mono">{stopPct}</span>
+                <span className="unit">%{spendWei > 0n ? ` · ${formatEthFixed(spendWei - stopAt, 2)} ETH` : ''}</span>
               </span>
-            </label>
+              <input
+                type="range"
+                className="slider"
+                min={10}
+                max={100}
+                step={5}
+                value={stopPct}
+                aria-label="Most you're willing to lose, percent of spend"
+                onChange={(e) => setStopPct(Number(e.target.value))}
+              />
+            </div>
           </div>
           {finalErrs.amountEth ? <span className="field-error">{finalErrs.amountEth}</span> : null}
         </div>
@@ -325,10 +336,20 @@ export function Setup({
         </button>
 
         <div className="cta-block">
-          <button className="btn" type="submit" disabled={tx.busy}>
-            Start run with {formatEthFixed(spendWei, 2)} ETH
-          </button>
-          <div className="cta-note">You can stop anytime and get the rest back.</div>
+          {wrongNetwork ? (
+            <button type="button" className="btn" disabled={switching} onClick={() => void switchChainAsync({ chainId: chain.id }).catch(() => {})}>
+              {switching ? 'Switch in your wallet.' : `Switch to ${chain.name}`}
+            </button>
+          ) : (
+            <button className="btn" type="submit" disabled={tx.busy || insufficientFunds}>
+              Start run with {formatEthFixed(spendWei, 2)} ETH
+            </button>
+          )}
+          {insufficientFunds ? (
+            <div className="cta-note field-error">Not enough ETH. Your wallet has {formatEthFixed(walletBalance!.value, 3)} ETH.</div>
+          ) : (
+            <div className="cta-note">You can stop anytime and get the rest back.</div>
+          )}
         </div>
         <TxStatus state={tx.state} />
         {(tried || amountError) && Object.keys(finalErrs).length ? (

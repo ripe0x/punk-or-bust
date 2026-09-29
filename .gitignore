@@ -7,3 +7,6 @@ node_modules/
 *.log
 deployments/pending.json
 deployments/dry-run.json
+deployments/local.json
+deployments/.local-anvil.pid
+deployments/.local-anvil.log

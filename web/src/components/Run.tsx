@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useReadContract } from 'wagmi';
 import type { Address } from 'viem';
 import { fwaAbi } from '../abi/IFWA';
 import { vaultAbi } from '../abi/Vault';
 import { useTx } from '../hooks/useTx';
-import { useListings, useVaultAuctions, useVaultEvents, useVaultState, type ListingInfo, type VaultState } from '../hooks/useVault';
+import { useAcquisitionStatus, useListings, useVaultAuctions, useVaultEvents, useVaultState, type ListingInfo, type VaultState } from '../hooks/useVault';
 import { useNftImage } from '../hooks/useNftImage';
 import { useNow } from '../hooks/useNow';
 import { COLLECTIONS, isPunks } from '../lib/collections';
@@ -18,13 +18,19 @@ import { Section, TxStatus } from './ui';
 import { Settings } from './Settings';
 import { Sweep } from './Sweep';
 
-const PAGE = 6;
-
 export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const { state, loading, error } = useVaultState(vault);
   const events = useVaultEvents(vault);
-  const [shown, setShown] = useState(PAGE);
   const [openDetail, setOpenDetail] = useState<bigint | null>(null);
+  const [sortKey, setSortKey] = useState<'time' | 'price'>('time');
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+  const toggleSort = (key: 'time' | 'price') => {
+    if (key === sortKey) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
 
   const discount = useReadContract({
     address: state?.fwa,
@@ -36,7 +42,28 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const pulls = pullCardsFromEvents(events.events);
   const listingIds = [...new Set(pulls.filter((p) => p.listingId !== undefined).map((p) => p.listingId!))];
   const listings = useListings(state?.fwa, listingIds);
+  const pendingIds = [...new Set(pulls.filter((p) => p.status === 'pending').map((p) => p.requestId))];
+  const pullStages = useAcquisitionStatus(state?.fwa, pendingIds);
   const auctions = useVaultAuctions(vault);
+
+  // Price = the pull's value (its listing), falling back to what was paid for it.
+  const priceOf = (p: PullCard): bigint =>
+    (p.listingId !== undefined ? listings[p.listingId.toString()]?.value : undefined) ?? p.spentPerPull ?? 0n;
+  const sortedPulls = useMemo(() => {
+    const arr = [...pulls];
+    arr.sort((a, b) => {
+      let d = 0;
+      if (sortKey === 'time') d = a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0;
+      else {
+        const pa = priceOf(a);
+        const pb = priceOf(b);
+        d = pa < pb ? -1 : pa > pb ? 1 : 0;
+      }
+      return sortDir === 'desc' ? -d : d;
+    });
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulls, sortKey, sortDir, listings]);
 
   if (!state) {
     return <p className="empty">{loading ? 'Loading your run.' : (friendlyLoadError(error) ?? 'No run found here.')}</p>;
@@ -53,24 +80,27 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
       <section className="pulls-section" aria-label="Your pulls">
         <div className="pulls-head">
           <h2>Your pulls</h2>
-          <span className="note">Newest first</span>
+          <div className="pull-sort" role="group" aria-label="Sort pulls">
+            <button type="button" className={sortKey === 'time' ? 'on' : ''} onClick={() => toggleSort('time')}>
+              Time{sortKey === 'time' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+            </button>
+            <button type="button" className={sortKey === 'price' ? 'on' : ''} onClick={() => toggleSort('price')}>
+              Price{sortKey === 'price' ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+            </button>
+          </div>
         </div>
         {pulls.length === 0 ? <p className="empty">No pulls yet.</p> : null}
-        {pulls.slice(0, shown).map((p) => (
+        {sortedPulls.map((p) => (
           <PullRow
             key={p.requestId.toString()}
             card={p}
             listing={p.listingId !== undefined ? listings[p.listingId.toString()] : undefined}
             auction={auctions[p.requestId.toString()]}
+            stage={pullStages[p.requestId.toString()]}
             discountBps={discountBps}
             onOpen={() => setOpenDetail(p.requestId)}
           />
         ))}
-        {pulls.length > shown ? (
-          <button className="btn-link" style={{ alignSelf: 'center' }} onClick={() => setShown((s) => s + PAGE)}>
-            Show older pulls
-          </button>
-        ) : null}
       </section>
       {isOwner ? (
         <MoreSection vault={vault} state={state} settings={events.settings} rawEvents={events.events} sold={sold} />
@@ -213,51 +243,75 @@ function PullRow({
   card,
   listing,
   auction,
+  stage,
   discountBps,
   onOpen,
 }: {
   card: PullCard;
   listing?: ListingInfo;
   auction?: OpenAuction;
+  stage?: number;
   discountBps: bigint;
   onOpen: () => void;
 }) {
   const now = useNow(1000);
   const { image, bg } = useNftImage(listing?.collection, listing?.tokenId);
   const name = listing ? `${collectionName(listing.collection)} #${listing.tokenId.toString()}` : 'Pull';
+  const paid = card.spentPerPull;
 
   if (card.status === 'pending') {
+    // FWA acquisition status: 2 or 5 mean the draw landed and it is being settled; anything else is
+    // still waiting for the draw. Show that as steps on a progress bar (requested, draw, settle).
+    const drawn = stage === 2 || stage === 5;
     return (
       <div className="pull-row">
         <div className="pull-thumb pending" />
         <div className="pull-body">
-          <div className="pull-name">Pulling now</div>
-          <div className="pull-status">Waiting for the draw</div>
+          <div className="pull-name">{drawn ? 'Drawn' : 'Pulling now'}</div>
+          <div className="pull-status pending-status">
+            {drawn ? 'Settling the result' : 'Waiting for the draw'}
+            <span className="dots" aria-hidden="true" />
+          </div>
+          <div className="pull-progress" role="progressbar" aria-valuemin={0} aria-valuemax={3} aria-valuenow={drawn ? 2 : 1}>
+            <div className="pull-progress-fill" style={{ width: drawn ? '66%' : '33%' }} />
+          </div>
         </div>
+        {paid !== undefined ? <div className="pull-figures"><div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div></div> : null}
       </div>
     );
   }
 
+  // Value the pull ended at, and profit or loss against what was paid.
   let statusEl: ReactNode;
-  let amount: string | undefined;
+  let valueLabel: string | undefined;
+  let value: bigint | undefined;
   if (card.status === 'kept') {
     statusEl = (
       <span className="pull-status kept">
         <StarIcon /> Kept &middot; in your wallet
       </span>
     );
+    value = listing?.value;
+    valueLabel = 'Worth';
   } else if (card.status === 'sold') {
     statusEl = <span className="pull-status">Sold back</span>;
-    if (listing) amount = `+${formatEth((listing.value * discountBps) / 10_000n, 3)}`;
+    if (listing) value = (listing.value * discountBps) / 10_000n;
+    valueLabel = 'Got back';
   } else if (card.status === 'auctioning') {
     const left = auction ? secondsLeft(auction.deadline, now) : 0;
     statusEl = <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>;
-    if (auction) amount = `bid ${formatEth(auction.highBid > 0n ? auction.highBid : auction.backstop, 2)}`;
+    if (auction) value = auction.highBid > 0n ? auction.highBid : auction.backstop;
+    valueLabel = 'Bid';
   } else if (card.status === 'forced') {
     statusEl = <span className="pull-status">Handled by FWA</span>;
+    value = listing?.value;
+    valueLabel = 'Worth';
   } else {
     statusEl = <span className="pull-status">Refunded</span>;
+    value = paid;
+    valueLabel = 'Refunded';
   }
+  const pnl = paid !== undefined && value !== undefined ? value - paid : undefined;
 
   return (
     <button className="pull-row" onClick={onOpen}>
@@ -267,8 +321,21 @@ function PullRow({
       <div className="pull-body">
         <div className="pull-name">{name}</div>
         {statusEl}
+        {paid !== undefined ? <div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div> : null}
       </div>
-      {amount ? <div className="pull-amount">{amount}</div> : null}
+      <div className="pull-figures">
+        {value !== undefined ? (
+          <div className="pull-val">
+            {valueLabel} {formatEth(value, 3)} ETH
+          </div>
+        ) : null}
+        {pnl !== undefined ? (
+          <div className={`pull-pnl ${pnl >= 0n ? 'pos' : 'neg'}`}>
+            {pnl >= 0n ? '+' : '−'}
+            {formatEth(pnl < 0n ? -pnl : pnl, 3)} ETH
+          </div>
+        ) : null}
+      </div>
     </button>
   );
 }
