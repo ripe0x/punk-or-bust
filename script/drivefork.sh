@@ -78,9 +78,11 @@ drive_once() {
   # Settle allocated pulls with generous gas. The sell-back path nests a gas-capped notifier
   # callback deep enough that an estimated gas limit starves it, so sync catches the revert and
   # skips; an explicit high limit lets it complete.
-  for V in "${vaults[@]}"; do
-    cast send "$V" 'sync(uint256)' 32 --from "$COORD" --unlocked --gas-limit 8000000 --rpc-url "$RPC" >/dev/null 2>&1 || true
-  done
+  if [ -z "${NO_SYNC:-}" ]; then
+    for V in "${vaults[@]}"; do
+      cast send "$V" 'sync(uint256)' 32 --from "$COORD" --unlocked --gas-limit 8000000 --rpc-url "$RPC" >/dev/null 2>&1 || true
+    done
+  fi
   echo "  allocated $allocated pull(s)"
   return 0
 }

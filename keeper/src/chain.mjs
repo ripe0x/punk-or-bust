@@ -170,8 +170,17 @@ export async function createChainAdapter({ rpcUrl, sendRpcUrl = null, privateKey
       try {
         const { result } = await pub.simulateContract(params);
         const est = await pub.estimateContractGas(params);
-        let gas = (est * 13n) / 10n;
-        if (gas > GAS_LIMIT[action.kind]) gas = GAS_LIMIT[action.kind];
+        // sync and finalize settle inside a try/catch: a pull that cannot be paid for is skipped, not
+        // reverted, so estimateGas returns the cheap skip path rather than the gas the settlement's
+        // nested callbacks need, and the sent transaction skips too. Give them their full budget;
+        // unused gas is not charged. request has no such catch, so its estimate stands.
+        let gas;
+        if (action.kind === 'sync' || action.kind === 'finalize') {
+          gas = GAS_LIMIT[action.kind];
+        } else {
+          gas = (est * 13n) / 10n;
+          if (gas > GAS_LIMIT[action.kind]) gas = GAS_LIMIT[action.kind];
+        }
         if (gas < est) gas = est;
         const data = encodeFunctionData({ abi: c.abi, functionName: c.functionName, args: c.args });
         return { ok: true, result, gasEstimate: est, req: { to: c.to, data, value: 0n, gas } };
