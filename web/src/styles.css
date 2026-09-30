@@ -177,6 +177,12 @@ button:disabled {
   color: var(--accent-text);
   font-weight: 600;
 }
+.nav-panel-connect {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+}
 
 .icon-btn {
   width: 44px;
