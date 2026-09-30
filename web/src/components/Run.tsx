@@ -406,7 +406,17 @@ function PullRow({
         <div className="pull-body">
           <div className="pull-name">{name}</div>
           <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>
-          {paidValueLine}
+          {paid !== undefined ? <div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div> : null}
+          {auction ? (
+            <>
+              <div className="pull-sub">Sell-back floor {formatEth(auction.backstop, 3)} ETH</div>
+              <div className="pull-sub">
+                {auction.highBid > 0n
+                  ? `High bid ${formatEth(auction.highBid, 3)} ETH`
+                  : `No bids yet · next ≥ ${formatEth(auction.minNextBid, 3)} ETH`}
+              </div>
+            </>
+          ) : null}
         </div>
         <div className="pull-figures">{pnlEl}</div>
       </button>
