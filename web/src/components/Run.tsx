@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useReadContract } from 'wagmi';
 import type { Address } from 'viem';
 import { fwaAbi } from '../abi/IFWA';
@@ -300,60 +300,75 @@ function PullRow({
   }
 
   // Value the pull ended at, and profit or loss against what was paid.
-  let statusEl: ReactNode;
   let valueLabel: string | undefined;
   let value: bigint | undefined;
   if (card.status === 'kept') {
-    statusEl = (
-      <span className="pull-status kept">
-        <StarIcon /> Kept &middot; in your wallet
-      </span>
-    );
     value = listing?.value;
     valueLabel = 'Value';
   } else if (card.status === 'sold') {
-    statusEl = <span className="pull-status">Sold back</span>;
     if (listing) value = (listing.value * discountBps) / 10_000n;
     valueLabel = 'Proceeds';
   } else if (card.status === 'auctioning') {
-    const left = auction ? secondsLeft(auction.deadline, now) : 0;
-    statusEl = <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>;
     if (auction) value = auction.highBid > 0n ? auction.highBid : auction.backstop;
     valueLabel = 'Bid';
   } else if (card.status === 'forced') {
-    statusEl = <span className="pull-status">Handled by FWA</span>;
     value = listing?.value;
     valueLabel = 'Value';
   } else {
-    statusEl = <span className="pull-status">Refunded</span>;
     value = paid;
     valueLabel = 'Refunded';
   }
   const pnl = paid !== undefined && value !== undefined ? value - paid : undefined;
+  const pnlEl =
+    pnl !== undefined ? (
+      <div className={`pull-pnl ${pnl >= 0n ? 'pos' : 'neg'}`}>
+        {pnl >= 0n ? '+' : '−'}
+        {formatEth(pnl < 0n ? -pnl : pnl, 3)} ETH
+      </div>
+    ) : null;
+  const paidValueLine = (
+    <>
+      {paid !== undefined ? <div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div> : null}
+      {value !== undefined ? (
+        <div className="pull-sub">
+          {valueLabel} {formatEth(value, 3)} ETH
+        </div>
+      ) : null}
+    </>
+  );
 
+  // Open auction: keep the live countdown; it is pinned at the top of the feed.
+  if (card.status === 'auctioning') {
+    const left = auction ? secondsLeft(auction.deadline, now) : 0;
+    return (
+      <button className="pull-row" onClick={onOpen}>
+        <div className="pull-thumb" style={{ background: bg }}>
+          {image ? <img src={image} alt="" /> : null}
+        </div>
+        <div className="pull-body">
+          <div className="pull-name">{name}</div>
+          <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>
+          {paidValueLine}
+        </div>
+        <div className="pull-figures">{pnlEl}</div>
+      </button>
+    );
+  }
+
+  // Result (kept, sold, forced, refunded): paid and value under the title, PnL on the right.
   return (
     <button className="pull-row" onClick={onOpen}>
       <div className="pull-thumb" style={{ background: bg }}>
         {image ? <img src={image} alt="" /> : null}
       </div>
       <div className="pull-body">
-        <div className="pull-name">{name}</div>
-        {statusEl}
-        {paid !== undefined ? <div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div> : null}
+        <div className="pull-name">
+          {card.status === 'kept' ? <StarIcon /> : null}
+          {name}
+        </div>
+        {paidValueLine}
       </div>
-      <div className="pull-figures">
-        {value !== undefined ? (
-          <div className="pull-val">
-            {valueLabel} {formatEth(value, 3)} ETH
-          </div>
-        ) : null}
-        {pnl !== undefined ? (
-          <div className={`pull-pnl ${pnl >= 0n ? 'pos' : 'neg'}`}>
-            {pnl >= 0n ? '+' : '−'}
-            {formatEth(pnl < 0n ? -pnl : pnl, 3)} ETH
-          </div>
-        ) : null}
-      </div>
+      <div className="pull-figures">{pnlEl}</div>
     </button>
   );
 }
