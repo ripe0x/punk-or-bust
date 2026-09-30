@@ -73,7 +73,10 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
 
   const sold = pulls.filter((p) => p.status === 'sold').length;
   const detailCard = openDetail !== null ? pulls.find((p) => p.requestId === openDetail) : undefined;
-  const rounds = [...new Set(sortedPulls.map((p) => p.round))].sort((a, b) => b - a);
+  // Open auctions are live and time-sensitive, so pin them above the historical feed.
+  const auctioningPulls = sortedPulls.filter((p) => p.status === 'auctioning');
+  const feedPulls = sortedPulls.filter((p) => p.status !== 'auctioning');
+  const rounds = [...new Set(feedPulls.map((p) => p.round))].sort((a, b) => b - a);
   const row = (p: PullCard) => (
     <PullRow
       key={p.requestId.toString()}
@@ -102,12 +105,18 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
           </div>
         </div>
         {pulls.length === 0 ? <p className="empty">No pulls yet.</p> : null}
+        {auctioningPulls.length > 0 ? (
+          <div className="pull-auctions">
+            <div className="pull-auctions-head">Live auction{auctioningPulls.length > 1 ? 's' : ''}</div>
+            {auctioningPulls.map(row)}
+          </div>
+        ) : null}
         {rounds.length <= 1
-          ? sortedPulls.map(row)
+          ? feedPulls.map(row)
           : rounds.map((rn) => (
               <div key={rn} className="pull-round">
                 <div className="pull-round-head">Round {rn}</div>
-                {sortedPulls.filter((p) => p.round === rn).map(row)}
+                {feedPulls.filter((p) => p.round === rn).map(row)}
               </div>
             ))}
       </section>
@@ -151,7 +160,7 @@ function RunCard({
       <div className="status-line">
         <span className="status-badge">
           <span className={`status-dot ${running ? '' : 'idle'}`} />
-          {running ? 'Running' : windingDown ? 'Winding down' : 'Idle'}
+          {running ? 'Running' : windingDown ? 'Finishing up' : 'Idle'}
         </span>
         <span className="small muted">{state.pullsRequested.toString()} pulls so far</span>
       </div>

@@ -1090,6 +1090,23 @@ label.search input:focus {
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
+.pull-auctions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 18px;
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  border-radius: var(--radius-md);
+}
+.pull-auctions-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-text);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
 .pull-amount {
   font-family: 'Geist Mono', monospace;
   font-size: 14px;
