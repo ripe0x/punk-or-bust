@@ -73,6 +73,18 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
 
   const sold = pulls.filter((p) => p.status === 'sold').length;
   const detailCard = openDetail !== null ? pulls.find((p) => p.requestId === openDetail) : undefined;
+  const rounds = [...new Set(sortedPulls.map((p) => p.round))].sort((a, b) => b - a);
+  const row = (p: PullCard) => (
+    <PullRow
+      key={p.requestId.toString()}
+      card={p}
+      listing={p.listingId !== undefined ? listings[p.listingId.toString()] : undefined}
+      auction={auctions[p.requestId.toString()]}
+      stage={pullStages[p.requestId.toString()]}
+      discountBps={discountBps}
+      onOpen={() => setOpenDetail(p.requestId)}
+    />
+  );
 
   return (
     <>
@@ -90,17 +102,14 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
           </div>
         </div>
         {pulls.length === 0 ? <p className="empty">No pulls yet.</p> : null}
-        {sortedPulls.map((p) => (
-          <PullRow
-            key={p.requestId.toString()}
-            card={p}
-            listing={p.listingId !== undefined ? listings[p.listingId.toString()] : undefined}
-            auction={auctions[p.requestId.toString()]}
-            stage={pullStages[p.requestId.toString()]}
-            discountBps={discountBps}
-            onOpen={() => setOpenDetail(p.requestId)}
-          />
-        ))}
+        {rounds.length <= 1
+          ? sortedPulls.map(row)
+          : rounds.map((rn) => (
+              <div key={rn} className="pull-round">
+                <div className="pull-round-head">Round {rn}</div>
+                {sortedPulls.filter((p) => p.round === rn).map(row)}
+              </div>
+            ))}
       </section>
       {isOwner ? (
         <MoreSection vault={vault} state={state} settings={events.settings} rawEvents={events.events} sold={sold} />
@@ -292,11 +301,11 @@ function PullRow({
       </span>
     );
     value = listing?.value;
-    valueLabel = 'Worth';
+    valueLabel = 'Value';
   } else if (card.status === 'sold') {
     statusEl = <span className="pull-status">Sold back</span>;
     if (listing) value = (listing.value * discountBps) / 10_000n;
-    valueLabel = 'Got back';
+    valueLabel = 'Proceeds';
   } else if (card.status === 'auctioning') {
     const left = auction ? secondsLeft(auction.deadline, now) : 0;
     statusEl = <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>;
@@ -305,7 +314,7 @@ function PullRow({
   } else if (card.status === 'forced') {
     statusEl = <span className="pull-status">Handled by FWA</span>;
     value = listing?.value;
-    valueLabel = 'Worth';
+    valueLabel = 'Value';
   } else {
     statusEl = <span className="pull-status">Refunded</span>;
     value = paid;

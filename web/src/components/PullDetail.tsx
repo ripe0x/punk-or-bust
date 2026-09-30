@@ -42,7 +42,7 @@ export function PullDetail({
     if (fee !== undefined) rows.push({ k: 'Fee', v: `${formatEth(fee, 6)} ETH` });
     rows.push({ k: 'Sent to', v: shortAddr(owner) });
   } else if (card.status === 'sold') {
-    if (listing) rows.push({ k: 'Sold for', v: `${formatEth((listing.value * discountBps) / 10_000n, 4)} ETH` });
+    if (listing) rows.push({ k: 'Proceeds', v: `${formatEth((listing.value * discountBps) / 10_000n, 4)} ETH` });
     if (fee !== undefined) rows.push({ k: 'Fee', v: `${formatEth(fee, 6)} ETH` });
   } else if (card.status === 'auctioning' && auction) {
     rows.push({ k: 'Sell-back price', v: `${formatEth(auction.backstop, 4)} ETH` });

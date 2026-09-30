@@ -11,6 +11,7 @@
   --accent-text: #b23b0f;
   --accent-text-strong: #9a310c;
   --accent-bg: #fbe1d6;
+  --profit-text: #2f7d32;
   --radius-lg: 20px;
   --radius-md: 16px;
   --radius-sm: 12px;
@@ -1069,10 +1070,25 @@ label.search input:focus {
   white-space: nowrap;
 }
 .pull-pnl.pos {
-  color: var(--accent-text);
+  color: var(--profit-text);
 }
 .pull-pnl.neg {
   color: var(--accent-text-strong);
+}
+.pull-round {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pull-round + .pull-round {
+  margin-top: 18px;
+}
+.pull-round-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 .pull-amount {
   font-family: 'Geist Mono', monospace;
