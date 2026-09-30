@@ -6,6 +6,7 @@ import { fwaAbi } from '../abi/IFWA';
 import { useFactoryFwa, useQuote } from '../hooks/useVault';
 import { useNftImage } from '../hooks/useNftImage';
 import { imageApi } from '../config';
+import { navigate } from '../router';
 import { formatEth } from '../lib/format';
 
 type PoolItem = { collection: Address; tokenId: bigint };
@@ -41,7 +42,7 @@ export function Home() {
   useEffect(() => {
     if (isConnected && wantsSetup.current) {
       wantsSetup.current = false;
-      window.location.hash = '#/setup';
+      navigate('/setup');
     }
   }, [isConnected]);
   const count = useReadContract({
@@ -58,7 +59,7 @@ export function Home() {
         <p>Put in some ETH and your run makes the pulls for you. Anything you don&apos;t keep is sold back, and that ETH goes into more pulls.</p>
         <a
           className="btn"
-          href="#/setup"
+          href="/setup"
           onClick={(e) => {
             if (isConnected || !openConnectModal) return;
             e.preventDefault();

@@ -221,7 +221,7 @@ export function Setup({
             ? 'It stopped taking new pulls. Its open pulls and auctions are still resolving; once they settle, the vault goes idle and you can start a new run.'
             : 'Stop it, or wait for it to wind down, before starting a new one.'}
         </p>
-        <a className="btn-link" href="#/run">
+        <a className="btn-link" href="/run">
           Go to your run
         </a>
       </div>
@@ -235,7 +235,7 @@ export function Setup({
   return (
     <>
       <header className="top with-back">
-        <a className="icon-btn" aria-label="Back" href="#/">
+        <a className="icon-btn" aria-label="Back" href="/">
           <BackIcon />
         </a>
         <div className="page-title">Set up a run</div>
