@@ -62,6 +62,11 @@ up() {
   cast rpc anvil_setNextBlockBaseFeePerGas 0x0 --rpc-url "$RPC" >/dev/null
   local from_block; from_block="$(cast block-number --rpc-url "$RPC")"
   echo "== anvil forking $FORK_SRC at block $from_block, chain $CHAIN_ID, $RPC (pid $(cat "$PIDFILE"))"
+  # The frontend scans logs from this block. anvil serves logs for blocks after the fork point from
+  # its own memory, but proxies the fork block itself (and earlier) to the upstream fork RPC, which
+  # rate-limits (429) and blanks the scan. Every app event is in a local block after the fork, so
+  # start one block past it to keep the whole scan local.
+  local scan_from=$((from_block + 1))
 
   echo "== deploy factory (sender $OWNER)"
   DEPLOY_RECORD="$RECORD" DEPLOY_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo local)" \
@@ -98,7 +103,7 @@ up() {
 VITE_RPC_URL=$RPC
 VITE_FACTORY=$factory
 VITE_CHAIN_ID=$CHAIN_ID
-VITE_FROM_BLOCK=$from_block
+VITE_FROM_BLOCK=$scan_from
 VITE_DEFAULT_KEEPER=$KEEPER
 VITE_WALLETCONNECT_PROJECT_ID=35fbd0525a32173af1040dc520a0e505
 EOF
