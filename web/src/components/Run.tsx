@@ -157,7 +157,7 @@ function RunCard({
       </div>
       <div className="run-value">
         <div className="amount num">
-          {formatEth(running || windingDown ? state.runValue : state.idle, 3)}
+          {formatEth(state.idle, 3)}
           <span className="unit"> ETH</span>
         </div>
         <div className="caption">{running || windingDown ? 'left to pull with' : 'in your vault'}</div>
