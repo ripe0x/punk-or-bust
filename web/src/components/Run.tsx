@@ -89,6 +89,19 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
       onOpen={() => setOpenDetail(p.requestId)}
     />
   );
+  const roundPnl = (rn: number): bigint | undefined => {
+    let sum = 0n;
+    let any = false;
+    for (const p of feedPulls) {
+      if (p.round !== rn || p.spentPerPull === undefined) continue;
+      const v = pullValue(p, p.listingId !== undefined ? listings[p.listingId.toString()] : undefined, auctions[p.requestId.toString()], discountBps);
+      if (v !== undefined) {
+        sum += v - p.spentPerPull;
+        any = true;
+      }
+    }
+    return any ? sum : undefined;
+  };
 
   return (
     <>
@@ -137,9 +150,12 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
                       Round {rn}
                       {current ? ' · current' : ''}
                     </span>
-                    <span className="pull-round-count">
-                      {inRound.length}
-                      {current ? '' : open ? ' –' : ' +'}
+                    <span className="pull-round-right">
+                      {pnlElement(roundPnl(rn))}
+                      <span className="pull-round-count">
+                        {inRound.length}
+                        {current ? '' : open ? ' –' : ' +'}
+                      </span>
                     </span>
                   </button>
                   {open ? inRound.map(row) : null}
@@ -284,6 +300,43 @@ export function collectionName(address?: Address): string {
   return COLLECTIONS.find((c) => c.address.toLowerCase() === address.toLowerCase())?.name ?? `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+const VALUE_LABEL: Record<PullCard['status'], string> = {
+  pending: '',
+  kept: 'Value',
+  sold: 'Proceeds',
+  forced: 'Value',
+  refunded: 'Refunded',
+  auctioning: 'Bid',
+};
+
+/** The ETH a pull ended at: kept/forced NFT value, sell-back proceeds, the auction bid or floor,
+ *  or the refund. Undefined until the listing or auction data is loaded. */
+function pullValue(card: PullCard, listing: ListingInfo | undefined, auction: OpenAuction | undefined, discountBps: bigint): bigint | undefined {
+  switch (card.status) {
+    case 'kept':
+    case 'forced':
+      return listing?.value;
+    case 'sold':
+      return listing ? (listing.value * discountBps) / 10_000n : undefined;
+    case 'auctioning':
+      return auction ? (auction.highBid > 0n ? auction.highBid : auction.backstop) : undefined;
+    case 'refunded':
+      return card.spentPerPull;
+    default:
+      return undefined;
+  }
+}
+
+function pnlElement(pnl: bigint | undefined) {
+  if (pnl === undefined) return null;
+  return (
+    <div className={`pull-pnl ${pnl >= 0n ? 'pos' : 'neg'}`}>
+      {pnl >= 0n ? '+' : '−'}
+      {formatEth(pnl < 0n ? -pnl : pnl, 3)} ETH
+    </div>
+  );
+}
+
 function PullRow({
   card,
   listing,
@@ -327,32 +380,10 @@ function PullRow({
   }
 
   // Value the pull ended at, and profit or loss against what was paid.
-  let valueLabel: string | undefined;
-  let value: bigint | undefined;
-  if (card.status === 'kept') {
-    value = listing?.value;
-    valueLabel = 'Value';
-  } else if (card.status === 'sold') {
-    if (listing) value = (listing.value * discountBps) / 10_000n;
-    valueLabel = 'Proceeds';
-  } else if (card.status === 'auctioning') {
-    if (auction) value = auction.highBid > 0n ? auction.highBid : auction.backstop;
-    valueLabel = 'Bid';
-  } else if (card.status === 'forced') {
-    value = listing?.value;
-    valueLabel = 'Value';
-  } else {
-    value = paid;
-    valueLabel = 'Refunded';
-  }
+  const value = pullValue(card, listing, auction, discountBps);
+  const valueLabel = VALUE_LABEL[card.status];
   const pnl = paid !== undefined && value !== undefined ? value - paid : undefined;
-  const pnlEl =
-    pnl !== undefined ? (
-      <div className={`pull-pnl ${pnl >= 0n ? 'pos' : 'neg'}`}>
-        {pnl >= 0n ? '+' : '−'}
-        {formatEth(pnl < 0n ? -pnl : pnl, 3)} ETH
-      </div>
-    ) : null;
+  const pnlEl = pnlElement(pnl);
   const paidValueLine = (
     <>
       {paid !== undefined ? <div className="pull-sub">Paid {formatEth(paid, 3)} ETH</div> : null}

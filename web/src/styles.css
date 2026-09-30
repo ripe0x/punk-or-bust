@@ -1150,6 +1150,14 @@ label.search input:focus {
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
 }
+.pull-round-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pull-round-right .pull-pnl {
+  font-size: 13px;
+}
 .pull-auctions {
   display: flex;
   flex-direction: column;
