@@ -1820,6 +1820,7 @@ ul.plain li {
 
 /* Round chart (running profit and loss over one round's pulls) */
 .round-chart {
+  margin: 12px 12px 0;
   background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -1828,6 +1829,7 @@ ul.plain li {
   gap: 8px;
 }
 .round-chart.compact {
+  margin: 0;
   background: none;
   padding: 4px 0 2px;
   gap: 4px;
