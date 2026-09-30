@@ -292,11 +292,11 @@ function PullRow({
       </span>
     );
     value = listing?.value;
-    valueLabel = 'Worth';
+    valueLabel = 'Value';
   } else if (card.status === 'sold') {
     statusEl = <span className="pull-status">Sold back</span>;
     if (listing) value = (listing.value * discountBps) / 10_000n;
-    valueLabel = 'Got back';
+    valueLabel = 'Proceeds';
   } else if (card.status === 'auctioning') {
     const left = auction ? secondsLeft(auction.deadline, now) : 0;
     statusEl = <span className="pull-status auctioning">At auction &middot; ends in {left > 0 ? formatDuration(left) : 'soon'}</span>;
@@ -305,7 +305,7 @@ function PullRow({
   } else if (card.status === 'forced') {
     statusEl = <span className="pull-status">Handled by FWA</span>;
     value = listing?.value;
-    valueLabel = 'Worth';
+    valueLabel = 'Value';
   } else {
     statusEl = <span className="pull-status">Refunded</span>;
     value = paid;
