@@ -22,6 +22,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const { state, loading, error } = useVaultState(vault);
   const events = useVaultEvents(vault);
   const [openDetail, setOpenDetail] = useState<bigint | null>(null);
+  const [openRounds, setOpenRounds] = useState<Set<number>>(() => new Set());
   const [sortKey, setSortKey] = useState<'time' | 'price'>('time');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const toggleSort = (key: 'time' | 'price') => {
@@ -113,12 +114,38 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
         ) : null}
         {rounds.length <= 1
           ? feedPulls.map(row)
-          : rounds.map((rn) => (
-              <div key={rn} className="pull-round">
-                <div className="pull-round-head">Round {rn}</div>
-                {feedPulls.filter((p) => p.round === rn).map(row)}
-              </div>
-            ))}
+          : rounds.map((rn, idx) => {
+              const current = idx === 0; // rounds are newest first
+              const open = current || openRounds.has(rn);
+              const inRound = feedPulls.filter((p) => p.round === rn);
+              return (
+                <div key={rn} className="pull-round">
+                  <button
+                    type="button"
+                    className="pull-round-head"
+                    aria-expanded={open}
+                    disabled={current}
+                    onClick={() =>
+                      setOpenRounds((s) => {
+                        const n = new Set(s);
+                        n.has(rn) ? n.delete(rn) : n.add(rn);
+                        return n;
+                      })
+                    }
+                  >
+                    <span>
+                      Round {rn}
+                      {current ? ' · current' : ''}
+                    </span>
+                    <span className="pull-round-count">
+                      {inRound.length}
+                      {current ? '' : open ? ' –' : ' +'}
+                    </span>
+                  </button>
+                  {open ? inRound.map(row) : null}
+                </div>
+              );
+            })}
       </section>
       {isOwner ? (
         <MoreSection vault={vault} state={state} settings={events.settings} rawEvents={events.events} sold={sold} />

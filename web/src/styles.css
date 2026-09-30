@@ -1084,11 +1084,28 @@ label.search input:focus {
   margin-top: 18px;
 }
 .pull-round-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  padding: 6px 2px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  cursor: pointer;
+  text-align: left;
+}
+.pull-round-head:disabled {
+  cursor: default;
+}
+.pull-round-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
 }
 .pull-auctions {
   display: flex;
