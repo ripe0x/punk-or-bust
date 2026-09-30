@@ -27,8 +27,8 @@ export function Settings({ vault, state, settings }: { vault: Address; state: Va
 function AutoReturn({ vault, enabled }: { vault: Address; enabled: boolean }) {
   const tx = useTx();
   return (
-    <div className="subsection">
-      <h3>Auto-return</h3>
+    <div className="setting">
+      <h4>Auto-return</h4>
       <p className="small">
         {enabled ? 'On: when a run finishes, idle ETH goes back to your wallet.' : 'Off: ETH stays in the run after a run.'}
       </p>
@@ -49,8 +49,8 @@ function GasCeiling({ vault, current }: { vault: Address; current: bigint }) {
   const [text, setText] = useState('');
   const check = checkGasCeiling(text);
   return (
-    <div className="subsection">
-      <h3>Gas ceiling</h3>
+    <div className="setting">
+      <h4>Gas ceiling</h4>
       <p className="small">Now {formatGwei(current)} gwei. Keepers do not request pulls above it.</p>
       <div className="row">
         <Field label="New ceiling (gwei)" error={text ? check.error : undefined}>
@@ -72,8 +72,8 @@ function GasCeiling({ vault, current }: { vault: Address; current: bigint }) {
 function PrivateMode({ vault, enabled }: { vault: Address; enabled: boolean }) {
   const tx = useTx();
   return (
-    <div className="subsection">
-      <h3>Private mode</h3>
+    <div className="setting">
+      <h4>Private mode</h4>
       <p className="small">
         {enabled
           ? 'On: only you and approved helpers can request pulls, and only approved helpers are paid. Anyone can still sync and finalize auctions.'
@@ -98,8 +98,8 @@ function Bounties({ vault, bounty, syncMax }: { vault: Address; bounty: bigint; 
   const edited = bountyText !== '' || syncText !== '';
   const check = checkBounties(bountyText || formatEth(bounty, 18), syncText || formatEth(syncMax, 18));
   return (
-    <div className="subsection">
-      <h3>Bounties</h3>
+    <div className="setting">
+      <h4>Bounties</h4>
       <p className="small">
         Paid from idle ETH on top of gas to whoever does the work. Pull requests and auction finalizes pay {formatEth(bounty, 5)} ETH. A sync
         pays from that up to {formatEth(syncMax, 5)} ETH as the oldest pull it settles ages to 30 minutes, so a late sync pays more.
@@ -169,8 +169,8 @@ function KeepListEditor({ vault, settings }: { vault: Address; settings: VaultSe
 
   const count = settings.collections.length + settings.tokens.length;
   return (
-    <div className="subsection">
-      <h3>Keep list</h3>
+    <div className="setting">
+      <h4>Keep list</h4>
       {text === null ? (
         <>
           {count === 0 ? <p className="small">Empty. Every pull sells back or goes to auction.</p> : null}
@@ -221,8 +221,8 @@ function Keepers({ vault, keepers, privateMode }: { vault: Address; keepers: Add
   const [text, setText] = useState('');
   const parsed = parseAddresses(text);
   return (
-    <div className="subsection">
-      <h3>Helpers</h3>
+    <div className="setting">
+      <h4>Helpers</h4>
       <p className="small">
         In private mode, approved helpers are the only callers who can request pulls with run ETH (within your run limits and gas ceiling) and
         the only ones paid. In public mode the list has no effect.

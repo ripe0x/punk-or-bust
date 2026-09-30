@@ -1675,17 +1675,47 @@ label.check {
   padding: 4px 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 0;
 }
+.more-body > p {
+  margin: 0;
+}
+/* A group inside More: Settings, Sweep NFT, Rewards. Separated by a divider and prominent title. */
 .subsection {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+}
+.more-body > .subsection {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
 }
 .subsection h3 {
-  font-size: 16px;
+  font-size: 17px;
   margin: 0;
   font-weight: 600;
+  letter-spacing: -0.2px;
+}
+/* One control within a group. Subordinate to the group title, separated by a hairline. */
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.setting h4 {
+  font-size: 14px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-2);
+}
+/* Inside More, spacing comes from the flex gap, so drop the elements' own stacking margins. */
+.more-body .row,
+.more-body .grid,
+.more-body .field,
+.more-body ul.plain {
+  margin: 0;
 }
 ul.plain {
   list-style: none;
