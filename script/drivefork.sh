@@ -4,9 +4,10 @@
 # delivers a random word for each pending pull (weighted selection, like the real VRF), and processes
 # the pool's queue, so pulls allocate. The running keeper then syncs them to kept, sold or auction.
 #
-#   ./script/drivefork.sh [--loop] [vault ...]
+#   ./script/drivefork.sh [--loop|warp] [vault ...]
 #     no vaults: every vault the factory in deployments/local.json created.
 #     --loop:    keep allocating as the keeper syncs and requests more, until interrupted.
+#     warp:      jump past open auction deadlines and finalize them (local fork only).
 #
 # Env: RPC_URL (default from web/.env.local, else http://127.0.0.1:8545).
 set -euo pipefail
@@ -29,10 +30,32 @@ COORD="0x$(cast storage "$POOL" 0 --rpc-url "$RPC" | sed 's/^0x//' | tail -c 41)
 COORD="$(cast to-check-sum-address "$COORD")"
 
 LOOP=0
+WARP=0
 VAULTS=()
 for a in "$@"; do
-  if [ "$a" = "--loop" ]; then LOOP=1; else VAULTS+=("$a"); fi
+  case "$a" in
+    --loop) LOOP=1 ;;
+    warp | --warp) WARP=1 ;;
+    *) VAULTS+=("$a") ;;
+  esac
 done
+
+# Jump the fork clock past every open auction's deadline and finalize them, so a run stuck
+# "finishing up" on auctions settles to Idle at once. Local fork only.
+warp_auctions() {
+  cast rpc evm_increaseTime 7200 --rpc-url "$RPC" >/dev/null
+  cast rpc anvil_mine 3 --rpc-url "$RPC" >/dev/null
+  echo "warped +2h to block time $(cast block --rpc-url "$RPC" -f timestamp)"
+  local V n
+  for V in "$@"; do
+    n=0
+    while read -r aid; do
+      [ -n "$aid" ] || continue
+      cast send "$V" 'finalizeAuction(uint256)' "$aid" --from "$COORD" --unlocked --gas-limit 8000000 --rpc-url "$RPC" >/dev/null 2>&1 && n=$((n + 1))
+    done < <(cast call "$V" 'openAuctionIds()(uint256[])' --rpc-url "$RPC" | sed 's/\[[0-9.e+]*\]//g' | tr -d '[] ' | tr ',' '\n')
+    echo "  $V: finalized $n auction(s), status now $(cast call "$V" 'status()(uint8)' --rpc-url "$RPC")"
+  done
+}
 
 # Every vault the factory created, from its VaultCreated(owner, vault) logs (vault is topic 2).
 discover_vaults() {
@@ -99,6 +122,11 @@ if [ "${#VAULTS[@]}" -eq 0 ]; then
 fi
 echo "pool $POOL, coordinator $COORD, vaults ${VAULTS[*]}"
 cast rpc anvil_setBalance "$COORD" 0xDE0B6B3A7640000 --rpc-url "$RPC" >/dev/null
+
+if [ "$WARP" -eq 1 ]; then
+  warp_auctions "${VAULTS[@]}"
+  exit 0
+fi
 
 if [ "$LOOP" -eq 1 ]; then
   echo "looping (Ctrl-C to stop); the keeper syncs and requests more between passes"
