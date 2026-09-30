@@ -203,7 +203,7 @@ function RunCard({
       ) : null}
       {isOwner && state.status === 0 ? (
         <div className="btn-row">
-          <a className="btn" href="#/setup">
+          <a className="btn" href="/setup">
             Start a run
           </a>
           {state.idle > 0n ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { getAddress, isAddress, type Address } from 'viem';
 import { configProblems } from './config';
+import { navigate, useRoute } from './router';
 import { useOwnerVault } from './hooks/useVault';
 import { Auctions } from './components/Auctions';
 import { Connect } from './components/Connect';
@@ -12,31 +12,27 @@ import { Setup } from './components/Setup';
 import { useNftImage } from './hooks/useNftImage';
 import { PUNKS_721 } from './lib/collections';
 
-type Route = { page: 'home' } | { page: 'setup' } | { page: 'run' } | { page: 'auctions' } | { page: 'faq' } | { page: 'view'; vault: Address };
-
-function parseHash(hash: string): Route {
-  const h = hash.replace(/^#\/?/, '');
-  if (h === 'setup') return { page: 'setup' };
-  if (h === 'run') return { page: 'run' };
-  if (h === 'faq') return { page: 'faq' };
-  if (h.startsWith('auctions')) return { page: 'auctions' };
-  const m = h.match(/^vault\/(0x[0-9a-fA-F]{40})$/);
-  if (m && isAddress(m[1], { strict: false })) return { page: 'view', vault: getAddress(m[1]) };
-  return { page: 'home' };
-}
-
-function useRoute(): Route {
-  const [route, setRoute] = useState(() => parseHash(window.location.hash));
+// Intercept clicks on internal links so path-based hrefs navigate without a full page load.
+function useLinkNavigation() {
   useEffect(() => {
-    const on = () => setRoute(parseHash(window.location.hash));
-    window.addEventListener('hashchange', on);
-    return () => window.removeEventListener('hashchange', on);
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as HTMLElement | null)?.closest('a');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (!href || !href.startsWith('/') || a.target === '_blank' || a.hasAttribute('download')) return;
+      if (a.origin !== window.location.origin) return;
+      e.preventDefault();
+      navigate(href);
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
   }, []);
-  return route;
 }
 
 export function App() {
   const route = useRoute();
+  useLinkNavigation();
   const [notice, setNotice] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
   const { vault, predicted, loading, refetch } = useOwnerVault(address);
@@ -47,15 +43,15 @@ export function App() {
     <div className="shell">
       {showHeader ? (
         <header className="top">
-          <a href="#/" className="brand">
+          <a href="/" className="brand">
             <BrandMark />
             <span className="brand-name">Punk or Bust</span>
           </a>
           <nav aria-label="Main">
-            <a href="#/run" className={route.page === 'run' ? 'active' : ''}>
+            <a href="/run" className={route.page === 'run' ? 'active' : ''}>
               My run
             </a>
-            <a href="#/auctions" className={route.page === 'auctions' ? 'active' : ''}>
+            <a href="/auctions" className={route.page === 'auctions' ? 'active' : ''}>
               Auctions
             </a>
           </nav>
@@ -85,7 +81,7 @@ export function App() {
             onDone={(msg) => {
               setNotice(msg ?? null);
               void refetch();
-              window.location.hash = '#/run';
+              navigate('/run');
             }}
           />
         ) : null}
@@ -108,7 +104,7 @@ export function App() {
       </main>
       {route.page !== 'setup' ? (
         <footer className="site">
-          <a href="#/faq">FAQ</a>
+          <a href="/faq">FAQ</a>
           <a href="#contracts">Contracts</a>
           <a href="#source">Source</a>
           <span>Built on FWA</span>
@@ -131,7 +127,7 @@ function NoRunYet() {
   return (
     <div className="empty">
       <p>You do not have a run yet.</p>
-      <a className="btn-link" href="#/setup">
+      <a className="btn-link" href="/setup">
         Start a run
       </a>
     </div>

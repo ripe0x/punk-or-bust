@@ -4,7 +4,6 @@
 # optional VITE_CHAIN_ID (default 1), VITE_DEFAULT_KEEPER, VITE_WALLETCONNECT_PROJECT_ID and VITE_IMAGE_API.
 # VITE_RPC_URL ships in the public bundle: use a public or domain-restricted endpoint. It must
 # serve eth_getLogs from VITE_FROM_BLOCK (archive); pruned public nodes drop older history.
-# Routes are hash routes, so no SPA redirect.
 
 [build]
   base = "web"
@@ -13,6 +12,13 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Path-based routes (/run, /faq, /vault/0x...): serve the app for any path so deep links and
+# refreshes work. Real files under /assets are served before this catch-all.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
 
 [[headers]]
   for = "/*"
