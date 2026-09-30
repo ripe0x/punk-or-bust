@@ -43,10 +43,7 @@ export function App() {
       {showHeader ? (
         <header className="top">
           <Brand />
-          <div className="top-right">
-            <Connect />
-            <NavMenu page={route.page} />
-          </div>
+          <NavMenu page={route.page} />
         </header>
       ) : null}
       <main className="page">
@@ -141,6 +138,9 @@ function NavMenu({ page }: { page: Route['page'] }) {
           <a href="/faq" className={page === 'faq' ? 'active' : ''}>
             FAQ
           </a>
+          <div className="nav-panel-connect">
+            <Connect />
+          </div>
         </nav>
       ) : null}
     </div>
