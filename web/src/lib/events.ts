@@ -274,6 +274,8 @@ export interface PullCard {
   status: PullCardStatus;
   blockNumber: bigint;
   txHash: Hex;
+  /** 1-based run this pull belongs to (a vault runs many times over its life). */
+  round: number;
 }
 
 /**
@@ -282,13 +284,22 @@ export interface PullCard {
  * per-pull price from the `PullsRequested` batch it belongs to.
  */
 export function pullCardsFromEvents(events: VaultEvent[]): PullCard[] {
+  const sorted = sortEvents(events);
+  // Each RunStarted opens a run; a pull's round is how many runs had started by its request block.
+  const runStartBlocks = sorted.filter((e) => e.name === 'RunStarted').map((e) => e.blockNumber);
+  const roundAt = (block: bigint): number => {
+    let n = 0;
+    for (const b of runStartBlocks) if (b <= block) n++;
+    return Math.max(1, n);
+  };
   const cards = new Map<string, PullCard>();
-  for (const e of sortEvents(events)) {
+  for (const e of sorted) {
     if (e.name === 'PullsRequested') {
       const ids = e.args.requestIds as readonly bigint[];
       const spentPerPull = e.args.spentPerPull as bigint;
+      const round = roundAt(e.blockNumber);
       for (const requestId of ids) {
-        cards.set(requestId.toString(), { requestId, spentPerPull, status: 'pending', blockNumber: e.blockNumber, txHash: e.txHash });
+        cards.set(requestId.toString(), { requestId, spentPerPull, status: 'pending', blockNumber: e.blockNumber, txHash: e.txHash, round });
       }
     } else if (e.name === 'PullResolved') {
       const requestId = e.args.requestId as bigint;
@@ -301,6 +312,8 @@ export function pullCardsFromEvents(events: VaultEvent[]): PullCard[] {
         status: PULL_CARD_STATUS[Number(e.args.outcome)] ?? 'pending',
         blockNumber: e.blockNumber,
         txHash: e.txHash,
+        // Keep the round of the request; a resolve can land in a later run.
+        round: prev?.round ?? roundAt(e.blockNumber),
       });
     }
   }
