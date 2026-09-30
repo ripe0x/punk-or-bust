@@ -411,9 +411,7 @@ function PullRow({
             <>
               <div className="pull-sub">Sell-back floor {formatEth(auction.backstop, 3)} ETH</div>
               <div className="pull-sub">
-                {auction.highBid > 0n
-                  ? `High bid ${formatEth(auction.highBid, 3)} ETH`
-                  : `No bids yet · next ≥ ${formatEth(auction.minNextBid, 3)} ETH`}
+                {auction.highBid > 0n ? `High bid ${formatEth(auction.highBid, 3)} ETH` : 'No bids yet'}
               </div>
             </>
           ) : null}
