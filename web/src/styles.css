@@ -854,6 +854,25 @@ label.search input:focus {
   font-size: 15px;
   color: var(--text-2);
 }
+.run-pnl {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 16px;
+  font-weight: 600;
+}
+.run-pnl.pos {
+  color: var(--profit-text);
+}
+.run-pnl.neg {
+  color: var(--accent-text-strong);
+}
+.run-pnl-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-3);
+}
 .floorbar-wrap {
   display: flex;
   flex-direction: column;
@@ -889,6 +908,22 @@ label.search input:focus {
 }
 .floorbar-legend .stop {
   color: var(--accent-text);
+}
+.floorbar.near .floorbar-fill {
+  background: var(--accent);
+}
+.floorbar.atfloor .floorbar-fill {
+  background: var(--accent-text-strong);
+}
+.floorbar-note {
+  font-size: 13px;
+  font-weight: 500;
+}
+.floorbar-note.near {
+  color: var(--accent-text);
+}
+.floorbar-note.atfloor {
+  color: var(--accent-text-strong);
 }
 .stat-trio {
   display: grid;

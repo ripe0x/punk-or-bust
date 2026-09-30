@@ -105,7 +105,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
 
   return (
     <>
-      <RunCard vault={vault} state={state} isOwner={isOwner} windDownReason={events.windDownReason} />
+      <RunCard vault={vault} state={state} isOwner={isOwner} windDownReason={events.windDownReason} sold={sold} />
       <section className="pulls-section" aria-label="Your pulls">
         <div className="pulls-head">
           <h2>Your pulls</h2>
@@ -185,11 +185,13 @@ function RunCard({
   state,
   isOwner,
   windDownReason,
+  sold,
 }: {
   vault: Address;
   state: VaultState;
   isOwner: boolean;
   windDownReason: number | null;
+  sold: number;
 }) {
   const tx = useTx();
   const [depositText, setDepositText] = useState('');
@@ -197,6 +199,9 @@ function RunCard({
   const running = state.status === 1;
   const windingDown = state.status === 2;
   const deposit = parseEthInput(depositText);
+  const active = running || windingDown;
+  // Run value (idle plus kept-NFT value) against what the run started with, deposits included.
+  const net = state.runValue - state.runStartValue;
 
   return (
     <section className="run-card">
@@ -205,16 +210,28 @@ function RunCard({
           <span className={`status-dot ${running ? '' : 'idle'}`} />
           {running ? 'Running' : windingDown ? 'Finishing up' : 'Idle'}
         </span>
-        <span className="small muted">{state.pullsRequested.toString()} pulls so far</span>
+        <span className="small muted">
+          {state.pullsRequested.toString()} pulls
+          {active ? ` · ${state.keeps.toString()} kept · ${sold} sold` : ''}
+        </span>
       </div>
       <div className="run-value">
         <div className="amount num">
           {formatEth(state.idle, 3)}
           <span className="unit"> ETH</span>
         </div>
-        <div className="caption">{running || windingDown ? 'left to pull with' : 'in your vault'}</div>
+        <div className="caption">{active ? 'left to pull with' : 'in your vault'}</div>
       </div>
-      {running || windingDown ? <RunFloorBar value={state.runValue} floor={state.runFloor} start={state.runStartValue} /> : null}
+      {active ? (
+        <div className={`run-pnl ${net >= 0n ? 'pos' : 'neg'}`}>
+          {net >= 0n ? 'Up ' : 'Down '}
+          {formatEth(net < 0n ? -net : net, 3)} ETH
+          <span className="run-pnl-sub">
+            in {formatEth(state.runStartValue, 2)} &rarr; now worth {formatEth(state.runValue, 2)}
+          </span>
+        </div>
+      ) : null}
+      {active ? <RunFloorBar value={state.runValue} floor={state.runFloor} start={state.runStartValue} /> : null}
       <div className="stat-trio">
         <div className="stat-tile">
           <div className="value">{state.keeps.toString()}</div>
@@ -280,9 +297,13 @@ function RunCard({
 
 function RunFloorBar({ value, floor, start }: { value: bigint; floor: bigint; start: bigint }) {
   const b = floorBar(value, floor, start);
+  const budget = start > floor ? start - floor : 0n;
+  // Within a fifth of the drawdown budget of the floor: about to wind down.
+  const near = !b.atFloor && budget > 0n && b.headroom * 5n < budget;
+  const tone = b.atFloor ? 'atfloor' : near ? 'near' : '';
   return (
-    <div className="floorbar-wrap" role="img" aria-label={`${formatEth(value)} ETH left. The run stops at ${formatEth(floor)} ETH.`}>
-      <div className="floorbar">
+    <div className="floorbar-wrap" role="img" aria-label={`${formatEth(value)} ETH, ${formatEth(b.headroom)} ETH above the ${formatEth(floor)} ETH stop`}>
+      <div className={`floorbar ${tone}`}>
         <div className="floorbar-fill" style={{ width: `${b.value * 100}%` }} />
         <div className="floorbar-mark" style={{ left: `calc(${b.floor * 100}% - 1px)` }} />
       </div>
@@ -290,6 +311,11 @@ function RunFloorBar({ value, floor, start }: { value: bigint; floor: bigint; st
         <span>Started with {formatEth(start, 2)}</span>
         <span className="stop">Stops at {formatEth(floor, 2)}</span>
       </div>
+      {b.atFloor ? (
+        <div className="floorbar-note atfloor">At your stop &middot; winding down</div>
+      ) : near ? (
+        <div className="floorbar-note near">Close to your stop &middot; {formatEth(b.headroom, 3)} ETH to go</div>
+      ) : null}
     </div>
   );
 }
