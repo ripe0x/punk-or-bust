@@ -27,14 +27,14 @@ export interface CheckedRun {
 
 const wholeNumber = (s: string) => (/^\d+$/.test(s.trim()) ? BigInt(s.trim()) : null);
 
-/** A reasonable starting point for a new run's form: 7 day deadline, 100 max pulls, no keep cap. */
+/** A reasonable starting point for a new run's form: 7 day deadline, 1000 max pulls, no keep cap. */
 export function defaultRunForm(nowSec: number): RunForm {
   return {
     amountEth: '',
     drawdownPct: 25,
     maxPullCostEth: '0.15',
     deadline: unixToLocalInput(nowSec + 7 * 86400),
-    maxPulls: '100',
+    maxPulls: '1000',
     stopAfterKeeps: '0',
   };
 }
