@@ -149,10 +149,10 @@ contract VaultKeeperTest is VaultTestBase {
     function testPaymentNeverExceedsIdle() public {
         vm.startPrank(owner);
         vault.stop();
-        (uint256 fee, uint256 total) = _price();
+        (, uint256 total) = _price();
         uint256 leftover = 0.0001 ether;
         vm.deal(owner, 2 ether);
-        vault.startRun{value: total + fee * 250 / 1_000_000 + leftover}(_params());
+        vault.startRun{value: total + leftover}(_params());
         vault.setKeepCollections(_one(address(nft)), true);
         assertEq(vault.requestPulls(1), 1, "owner pulls");
         vm.stopPrank();
@@ -267,9 +267,8 @@ contract VaultKeeperTest is VaultTestBase {
     function testFloorReserveIncludesBounty() public {
         vm.startPrank(owner);
         vault.stop();
-        (uint256 fee, uint256 total) = _price();
-        uint256 funding =
-            total + fee * 250 / 1_000_000 + vault.REQUEST_GAS_CAP() * vault.gasCeiling() + vault.bountyWei() - 1;
+        (, uint256 total) = _price();
+        uint256 funding = total + vault.REQUEST_GAS_CAP() * vault.gasCeiling() + vault.bountyWei() - 1;
         vm.deal(owner, funding);
         vault.startRun{value: funding}(_params());
         vm.stopPrank();

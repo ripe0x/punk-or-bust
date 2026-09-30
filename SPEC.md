@@ -34,9 +34,8 @@ External, already deployed:
 ## Fees and builder reward
 
 - Fee recipient and router treasury: `0xea194A186EBe76A84E2B2027f5f23F81939c05AD`. Immutable.
-- Pull fee: **0.025%** (250 parts per million) of the ETH purchase price of each completed pull,
-  excluding VRF. A pull is completed once FWA allocates it a listing, including forced outcomes.
-  Failed or refunded pulls pay nothing. Charged once.
+- Pull fee: **none** (0). The vault takes nothing from the user's pull price. Protocol revenue
+  comes from the builder reward below.
 - Builder reward: FWA pays a share of its protocol fee (currently 1,500 bps of it) to the address
   that calls `acquire`, and only when that caller is not the purchaser. The router is the caller
   and the vault is the purchaser, so the reward accrues to the router and goes to the treasury. It
@@ -223,7 +222,7 @@ runs at most about 30 minutes, and keepers must sync within minutes of allocatio
 
 | Name | Value |
 |---|---|
-| Pull fee | 250 ppm (0.025%) |
+| Pull fee | 0 (none) |
 | Fee recipient / router treasury | `0xea194A186EBe76A84E2B2027f5f23F81939c05AD` |
 | Default gas ceiling | 1.2 gwei (owner editable, 0 < x <= 100 gwei) |
 | Miss auction gap trigger | 900 bps |

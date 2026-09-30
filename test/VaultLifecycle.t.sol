@@ -6,7 +6,7 @@ import {VaultFactory} from "../src/VaultFactory.sol";
 import {VaultTestBase} from "./harness/VaultTestBase.sol";
 
 contract VaultLifecycleTest is VaultTestBase {
-    uint256 internal constant FEE_PPM = 250;
+    uint256 internal constant FEE_PPM = 0;
 
     function testCreateVaultStartsFirstRun() public {
         address predicted = factory.predictVault(owner);
@@ -137,7 +137,7 @@ contract VaultLifecycleTest is VaultTestBase {
         assertEq(treasury.balance, 0, "no fee at request");
         _allocate(requestId, listingId);
         _ownerSync();
-        assertEq(treasury.balance, escrow * FEE_PPM / 1_000_000, "250 ppm of price excluding VRF");
+        assertEq(treasury.balance, escrow * FEE_PPM / 1_000_000, "no pull fee");
         assertEq(vault.feeOwed(), 0, "paid");
         assertEq(vault.feesPaid(), treasury.balance, "running total");
 

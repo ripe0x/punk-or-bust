@@ -84,7 +84,7 @@ contract Vault is ReentrancyGuardTransient {
     }
 
     uint256 public constant BPS = 10_000;
-    uint256 public constant PULL_FEE_PPM = 250;
+    uint256 public constant PULL_FEE_PPM = 0;
     uint256 public constant PPM = 1_000_000;
     uint256 public constant MAX_BATCH = 5;
     uint256 public constant MAX_OUTSTANDING = 32;
