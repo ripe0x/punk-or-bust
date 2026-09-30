@@ -5,18 +5,20 @@ import { configProblems } from './config';
 import { useOwnerVault } from './hooks/useVault';
 import { Auctions } from './components/Auctions';
 import { Connect } from './components/Connect';
+import { Faq } from './components/Faq';
 import { Home } from './components/Home';
 import { Run } from './components/Run';
 import { Setup } from './components/Setup';
 import { useNftImage } from './hooks/useNftImage';
 import { PUNKS_721 } from './lib/collections';
 
-type Route = { page: 'home' } | { page: 'setup' } | { page: 'run' } | { page: 'auctions' } | { page: 'view'; vault: Address };
+type Route = { page: 'home' } | { page: 'setup' } | { page: 'run' } | { page: 'auctions' } | { page: 'faq' } | { page: 'view'; vault: Address };
 
 function parseHash(hash: string): Route {
   const h = hash.replace(/^#\/?/, '');
   if (h === 'setup') return { page: 'setup' };
   if (h === 'run') return { page: 'run' };
+  if (h === 'faq') return { page: 'faq' };
   if (h.startsWith('auctions')) return { page: 'auctions' };
   const m = h.match(/^vault\/(0x[0-9a-fA-F]{40})$/);
   if (m && isAddress(m[1], { strict: false })) return { page: 'view', vault: getAddress(m[1]) };
@@ -101,10 +103,12 @@ export function App() {
           )
         ) : null}
         {route.page === 'auctions' ? <Auctions /> : null}
+        {route.page === 'faq' ? <Faq /> : null}
         {route.page === 'view' ? <Run vault={route.vault} viewer={address} /> : null}
       </main>
       {route.page !== 'setup' ? (
         <footer className="site">
+          <a href="#/faq">FAQ</a>
           <a href="#contracts">Contracts</a>
           <a href="#source">Source</a>
           <span>Built on FWA</span>

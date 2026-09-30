@@ -54,7 +54,7 @@ export function Home() {
   return (
     <>
       <section className="hero">
-        <h1>Pull from the pool. Keep what you love. Sell back the rest.</h1>
+        <h1>Pick collections. Pull from the pool. Keep your picks. Sell back the rest.</h1>
         <p>Put in some ETH and your run makes the pulls for you. Anything you don&apos;t keep is sold back, and that ETH goes into more pulls.</p>
         <a
           className="btn"
