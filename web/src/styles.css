@@ -1818,8 +1818,8 @@ ul.plain li {
   }
 }
 
-/* Session chart (run value over pulls) */
-.session-chart {
+/* Round chart (running profit and loss over one round's pulls) */
+.round-chart {
   background: var(--surface);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -1827,32 +1827,38 @@ ul.plain li {
   flex-direction: column;
   gap: 8px;
 }
-.session-chart svg {
+.round-chart.compact {
+  background: none;
+  padding: 8px 0 4px;
+  gap: 4px;
+}
+.round-chart svg {
   width: 100%;
   height: auto;
   display: block;
+  touch-action: none;
 }
-.session-chart-head,
-.session-chart-foot {
+.round-chart-head {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
   color: var(--text-3);
 }
-.session-chart-head .pos {
+.round-chart-head .pos {
   color: var(--profit-text);
 }
-.session-chart-head .neg {
+.round-chart-head .neg {
   color: var(--accent-text-strong);
 }
-.session-chart-foot .stop {
-  color: var(--accent-text);
+.round-chart-zero {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
-.session-area {
-  fill: var(--row);
+.round-chart-area {
   stroke: none;
 }
-.session-line {
+.round-chart-line {
   fill: none;
   stroke: var(--ink);
   stroke-width: 2;
@@ -1860,17 +1866,26 @@ ul.plain li {
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
-.session-floor {
-  stroke: var(--accent-text-strong);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-  vector-effect: non-scaling-stroke;
+.round-chart-hit {
+  fill: var(--ground);
+  stroke: var(--ink);
+  stroke-width: 1.5;
 }
-.session-cross {
+.round-chart-win {
+  fill: var(--profit-text);
+}
+.round-chart-cross {
   stroke: var(--line);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-.session-dot {
-  fill: var(--ink);
+.round-chart-end {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+.round-chart-end.pos {
+  fill: var(--profit-text);
+}
+.round-chart-end.neg {
+  fill: var(--accent-text-strong);
 }

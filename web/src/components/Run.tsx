@@ -14,7 +14,7 @@ import { floorBar } from '../lib/floor';
 import { formatDuration, formatEth, parseEthInput, windDownReasonLabel } from '../lib/format';
 import { secondsLeft, type OpenAuction } from '../lib/auction';
 import { PullDetail } from './PullDetail';
-import { SessionChart } from './SessionChart';
+import { RoundChart, type DeltaPull } from './RoundChart';
 import { Section, TxStatus } from './ui';
 import { Settings } from './Settings';
 import { Sweep } from './Sweep';
@@ -80,21 +80,21 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const feedPulls = sortedPulls.filter((p) => p.status !== 'auctioning');
   const rounds = [...new Set(feedPulls.map((p) => p.round))].sort((a, b) => b - a);
 
-  // Vault value after each resolved pull, oldest first, for the session chart.
-  const startEth = Number(state.runStartValue) / 1e18;
-  const sessionValues: number[] = [startEth];
-  {
-    let cum = 0;
-    const resolved = [...pulls]
-      .filter((p) => p.status !== 'pending' && p.status !== 'auctioning')
+  // One round's resolved pulls as cost/proceeds deltas, oldest first, for its P&L chart.
+  const roundDeltaPulls = (rn: number): DeltaPull[] => {
+    const out: DeltaPull[] = [];
+    const inRound = feedPulls
+      .filter((p) => p.round === rn && p.status !== 'pending' && p.spentPerPull !== undefined)
       .sort((a, b) => (a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0));
-    for (const p of resolved) {
+    for (const p of inRound) {
       const v = pullValue(p, p.listingId !== undefined ? listings[p.listingId.toString()] : undefined, auctions[p.requestId.toString()], discountBps);
       if (v === undefined || p.spentPerPull === undefined) continue;
-      cum += Number(v - p.spentPerPull) / 1e18;
-      sessionValues.push(startEth + cum);
+      out.push({ cost: p.spentPerPull, proceeds: v, hit: p.status === 'kept' });
     }
-  }
+    return out;
+  };
+  const currentRound = rounds[0];
+  const currentDeltas = currentRound !== undefined ? roundDeltaPulls(currentRound) : [];
   const row = (p: PullCard) => (
     <PullRow
       key={p.requestId.toString()}
@@ -123,7 +123,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   return (
     <>
       <RunCard vault={vault} state={state} isOwner={isOwner} windDownReason={events.windDownReason} sold={sold} />
-      {sessionValues.length >= 2 ? <SessionChart values={sessionValues} floor={Number(state.runFloor) / 1e18} start={startEth} /> : null}
+      {currentDeltas.length >= 1 ? <RoundChart pulls={currentDeltas} label="This round" /> : null}
       <section className="pulls-section" aria-label="Your pulls">
         <div className="pulls-head">
           <h2>Your pulls</h2>
@@ -176,7 +176,15 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
                       </span>
                     </span>
                   </button>
-                  {open ? inRound.map(row) : null}
+                  {open ? (
+                    <>
+                      {!current ? (() => {
+                        const d = roundDeltaPulls(rn);
+                        return d.length >= 1 ? <RoundChart pulls={d} label={`Round ${rn}`} compact /> : null;
+                      })() : null}
+                      {inRound.map(row)}
+                    </>
+                  ) : null}
                 </div>
               );
             })}
