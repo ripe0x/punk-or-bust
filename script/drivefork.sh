@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local fork only. FWA V2's off-chain VRF operator does not run on a fork, so pulls never leave
 # "Pending" and the UI sits at "Waiting for the draw". This impersonates the pool's VRF coordinator,
-# delivers a word for each pending pull (word 0 selects the leftmost active listing), and processes
+# delivers a random word for each pending pull (weighted selection, like the real VRF), and processes
 # the pool's queue, so pulls allocate. The running keeper then syncs them to kept, sold or auction.
 #
 #   ./script/drivefork.sh [--loop] [vault ...]
@@ -69,7 +69,13 @@ drive_once() {
     [ "$next" -gt "$last" ] && break
     id="${SEQID[$next]:-}"
     if [ -n "$id" ]; then
-      cast send "$POOL" 'rawFulfillRandomWords(uint256,uint256[])' "$id" '[0]' \
+      # A uniform random word in [0, totalWeight) makes the pool pick a listing weighted by its
+      # weight, exactly as the real VRF does, so pulls hit low-value listings far more often than
+      # high-value ones. A fixed word would deterministically pick one slot and skew the outcomes.
+      local tw word
+      tw="$(cast call "$POOL" 'totalWeight()(uint256)' --rpc-url "$RPC" | sed 's/ .*//')"
+      word="$(python3 -c 'import secrets,sys; n=int(sys.argv[1]); print(secrets.randbelow(n) if n>0 else 0)' "$tw")"
+      cast send "$POOL" 'rawFulfillRandomWords(uint256,uint256[])' "$id" "[$word]" \
         --from "$COORD" --unlocked --gas-limit 3000000 --rpc-url "$RPC" >/dev/null 2>&1 && allocated=$((allocated + 1))
     fi
     cast send "$POOL" 'processAcquisitions(uint256)' 1 --from "$COORD" --unlocked --rpc-url "$RPC" >/dev/null 2>&1 || break
