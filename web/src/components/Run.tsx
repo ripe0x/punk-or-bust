@@ -362,10 +362,12 @@ function PullRow({
         {image ? <img src={image} alt="" /> : null}
       </div>
       <div className="pull-body">
-        <div className="pull-name">
-          {card.status === 'kept' ? <StarIcon /> : null}
-          {name}
-        </div>
+        <div className="pull-name">{name}</div>
+        {card.status === 'kept' ? (
+          <span className="pull-status kept">
+            <StarIcon /> Kept &middot; in your wallet
+          </span>
+        ) : null}
         {paidValueLine}
       </div>
       <div className="pull-figures">{pnlEl}</div>
