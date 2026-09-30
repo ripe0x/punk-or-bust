@@ -1829,12 +1829,13 @@ ul.plain li {
 }
 .round-chart.compact {
   background: none;
-  padding: 8px 0 4px;
+  padding: 4px 0 2px;
   gap: 4px;
 }
+.round-chart-plot {
+  position: relative;
+}
 .round-chart svg {
-  width: 100%;
-  height: auto;
   display: block;
   touch-action: none;
 }
@@ -1888,4 +1889,63 @@ ul.plain li {
 }
 .round-chart-end.neg {
   fill: var(--accent-text-strong);
+}
+.round-chart-hover {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.round-chart-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  margin-left: 0;
+  min-width: 132px;
+  padding: 8px 10px;
+  background: var(--ink);
+  color: var(--surface);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+  z-index: 2;
+}
+.round-chart-tip.is-left {
+  transform: translateX(-8px);
+}
+.round-chart-tip.is-right {
+  transform: translateX(-100%) translateX(8px);
+}
+.round-chart-tip strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.round-chart-tip-kept {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.round-chart-tip span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.round-chart-tip small {
+  color: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.round-chart-tip .pos {
+  color: #7bd88f;
+}
+.round-chart-tip .neg {
+  color: #eba1a1;
 }
