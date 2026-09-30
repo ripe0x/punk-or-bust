@@ -985,11 +985,6 @@ label.search input:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pull-name svg {
-  vertical-align: -2px;
-  margin-right: 5px;
-  color: var(--profit-text);
-}
 .pull-status {
   font-size: 14px;
   color: var(--text-3);
