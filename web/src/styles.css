@@ -466,6 +466,36 @@ form.stack {
   flex-direction: column;
   gap: 14px;
 }
+.keep-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.keep-presets-label {
+  font-size: 14px;
+  color: var(--text-3);
+  margin-right: 2px;
+}
+.chip {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--input-border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.chip:hover {
+  border-color: var(--ink);
+}
+.chip.ghost {
+  border-style: dashed;
+  color: var(--text-3);
+}
 .search {
   height: 48px;
   padding: 0 14px;
