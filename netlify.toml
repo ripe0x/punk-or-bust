@@ -14,7 +14,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  VITE_WALLETCONNECT_PROJECT_ID = "35fbd0525a32173af1040dc520a0e505"
+  VITE_WALLETCONNECT_PROJECT_ID = "85fb6713895e1a9785b742820c6eb911"
 
 # Path-based routes (/run, /faq, /vault/0x...): serve the app for any path so deep links and
 # refreshes work. Real files under /assets are served before this catch-all.
