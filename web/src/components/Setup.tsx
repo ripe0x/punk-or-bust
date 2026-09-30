@@ -128,6 +128,14 @@ export function Setup({
     });
   }
 
+  // "Skip commons" preset: keep every in-pool collection whose floor ask is at or above a cutoff,
+  // a one tap premium tier the owner can then refine. UI only; it just fills the keep list, so
+  // collections not in the pool now (or listed later) are not covered.
+  const hasPrices = shown.some((c) => (askWei[c.address.toLowerCase()] ?? 0n) > 0n);
+  function keepAtLeast(minWei: bigint) {
+    setSelected(new Map(shown.filter((c) => (askWei[c.address.toLowerCase()] ?? 0n) >= minWei).map((c) => [c.address.toLowerCase(), c.address])));
+  }
+
   const runForm: RunForm = { ...run, amountEth: spendEth, drawdownPct: stopPct };
   const checkedRun = checkRunForm(runForm, now, mode === 'create');
   const gasCheck = checkGasCeiling(more.gasCeilingGwei);
@@ -252,6 +260,17 @@ export function Setup({
             What do you want to keep?
           </legend>
           <p className="form-lede">Pull one of these and it goes to your wallet. Everything else is sold back to pay for more pulls.</p>
+          {hasPrices ? (
+            <div className="keep-presets">
+              <span className="keep-presets-label">Skip commons, keep floor</span>
+              <button type="button" className="chip" onClick={() => keepAtLeast(10n ** 17n)}>&ge; 0.1</button>
+              <button type="button" className="chip" onClick={() => keepAtLeast(5n * 10n ** 17n)}>&ge; 0.5</button>
+              <button type="button" className="chip" onClick={() => keepAtLeast(10n ** 18n)}>&ge; 1 ETH</button>
+              {selected.size > 0 ? (
+                <button type="button" className="chip ghost" onClick={() => setSelected(new Map())}>Clear</button>
+              ) : null}
+            </div>
+          ) : null}
           <button type="button" className="search" onClick={() => setPickerOpen(true)} aria-label={`Search ${shown.length} collections`}>
             <SearchIcon />
             <span style={{ color: 'var(--text-3)', fontSize: 16 }}>Search {shown.length} collections</span>
