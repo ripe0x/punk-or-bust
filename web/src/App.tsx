@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { configProblems } from './config';
-import { navigate, useRoute } from './router';
+import { navigate, useRoute, type Route } from './router';
 import { useOwnerVault } from './hooks/useVault';
 import { Auctions } from './components/Auctions';
 import { Brand } from './components/Brand';
@@ -43,15 +43,10 @@ export function App() {
       {showHeader ? (
         <header className="top">
           <Brand />
-          <nav aria-label="Main">
-            <a href="/run" className={route.page === 'run' ? 'active' : ''}>
-              My run
-            </a>
-            <a href="/auctions" className={route.page === 'auctions' ? 'active' : ''}>
-              Auctions
-            </a>
-          </nav>
-          <Connect />
+          <div className="top-right">
+            <Connect />
+            <NavMenu page={route.page} />
+          </div>
         </header>
       ) : null}
       <main className="page">
@@ -105,6 +100,48 @@ export function App() {
           <a href="#source">Source</a>
           <span>Built on FWA</span>
         </footer>
+      ) : null}
+    </div>
+  );
+}
+
+function NavMenu({ page }: { page: Route['page'] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+  return (
+    <div className="nav-menu" ref={ref}>
+      <button type="button" className="nav-toggle" aria-label="Menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
+      {open ? (
+        <nav className="nav-panel" aria-label="Main" onClick={() => setOpen(false)}>
+          <a href="/run" className={page === 'run' ? 'active' : ''}>
+            My run
+          </a>
+          <a href="/auctions" className={page === 'auctions' ? 'active' : ''}>
+            Auctions
+          </a>
+          <a href="/faq" className={page === 'faq' ? 'active' : ''}>
+            FAQ
+          </a>
+        </nav>
       ) : null}
     </div>
   );
