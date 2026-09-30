@@ -212,10 +212,15 @@ export function Setup({
 
   if (isConnected && (loading || (vault && vaultLoading))) return <p className="empty">Looking up your run.</p>;
   if (mode === 'blocked') {
+    const windingDown = vaultState?.status === 2;
     return (
       <div className="section" style={{ paddingTop: 40 }}>
-        <h1 className="form-heading">Your run is already going</h1>
-        <p className="lede">Stop it, or wait for it to wind down, before starting a new one.</p>
+        <h1 className="form-heading">{windingDown ? 'Your run is finishing up' : 'Your run is already going'}</h1>
+        <p className="lede">
+          {windingDown
+            ? 'It stopped taking new pulls. Its open pulls and auctions are still resolving; once they settle, the vault goes idle and you can start a new run.'
+            : 'Stop it, or wait for it to wind down, before starting a new one.'}
+        </p>
         <a className="btn-link" href="#/run">
           Go to your run
         </a>
