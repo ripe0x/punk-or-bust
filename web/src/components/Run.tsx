@@ -14,6 +14,7 @@ import { floorBar } from '../lib/floor';
 import { formatDuration, formatEth, parseEthInput, windDownReasonLabel } from '../lib/format';
 import { secondsLeft, type OpenAuction } from '../lib/auction';
 import { PullDetail } from './PullDetail';
+import { SessionChart } from './SessionChart';
 import { Section, TxStatus } from './ui';
 import { Settings } from './Settings';
 import { Sweep } from './Sweep';
@@ -78,6 +79,22 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   const auctioningPulls = sortedPulls.filter((p) => p.status === 'auctioning');
   const feedPulls = sortedPulls.filter((p) => p.status !== 'auctioning');
   const rounds = [...new Set(feedPulls.map((p) => p.round))].sort((a, b) => b - a);
+
+  // Vault value after each resolved pull, oldest first, for the session chart.
+  const startEth = Number(state.runStartValue) / 1e18;
+  const sessionValues: number[] = [startEth];
+  {
+    let cum = 0;
+    const resolved = [...pulls]
+      .filter((p) => p.status !== 'pending' && p.status !== 'auctioning')
+      .sort((a, b) => (a.blockNumber < b.blockNumber ? -1 : a.blockNumber > b.blockNumber ? 1 : 0));
+    for (const p of resolved) {
+      const v = pullValue(p, p.listingId !== undefined ? listings[p.listingId.toString()] : undefined, auctions[p.requestId.toString()], discountBps);
+      if (v === undefined || p.spentPerPull === undefined) continue;
+      cum += Number(v - p.spentPerPull) / 1e18;
+      sessionValues.push(startEth + cum);
+    }
+  }
   const row = (p: PullCard) => (
     <PullRow
       key={p.requestId.toString()}
@@ -106,6 +123,7 @@ export function Run({ vault, viewer }: { vault: Address; viewer?: Address }) {
   return (
     <>
       <RunCard vault={vault} state={state} isOwner={isOwner} windDownReason={events.windDownReason} sold={sold} />
+      {sessionValues.length >= 2 ? <SessionChart values={sessionValues} floor={Number(state.runFloor) / 1e18} start={startEth} /> : null}
       <section className="pulls-section" aria-label="Your pulls">
         <div className="pulls-head">
           <h2>Your pulls</h2>
