@@ -4,13 +4,12 @@ import { configProblems } from './config';
 import { navigate, useRoute } from './router';
 import { useOwnerVault } from './hooks/useVault';
 import { Auctions } from './components/Auctions';
+import { Brand } from './components/Brand';
 import { Connect } from './components/Connect';
 import { Faq } from './components/Faq';
 import { Home } from './components/Home';
 import { Run } from './components/Run';
 import { Setup } from './components/Setup';
-import { useNftImage } from './hooks/useNftImage';
-import { PUNKS_721 } from './lib/collections';
 
 // Intercept clicks on internal links so path-based hrefs navigate without a full page load.
 function useLinkNavigation() {
@@ -43,10 +42,7 @@ export function App() {
     <div className="shell">
       {showHeader ? (
         <header className="top">
-          <a href="/" className="brand">
-            <BrandMark />
-            <span className="brand-name">Punk or Bust</span>
-          </a>
+          <Brand />
           <nav aria-label="Main">
             <a href="/run" className={route.page === 'run' ? 'active' : ''}>
               My run
@@ -111,15 +107,6 @@ export function App() {
         </footer>
       ) : null}
     </div>
-  );
-}
-
-function BrandMark() {
-  const { image, bg } = useNftImage(PUNKS_721, 1042n);
-  return (
-    <span className="brand-mark" style={{ background: bg }} aria-hidden="true">
-      {image ? <img src={image} alt="" /> : null}
-    </span>
   );
 }
 

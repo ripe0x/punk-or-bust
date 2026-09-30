@@ -1688,3 +1688,29 @@ ul.plain li {
   line-height: 1.55;
   color: var(--text-2);
 }
+
+/* Rotating "<name> or Bust" wordmark */
+.brand-odo {
+  display: inline-flex;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+.brand-odo-word {
+  display: inline-block;
+  animation: odo-roll 0.42s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes odo-roll {
+  from {
+    transform: translateY(88%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-odo-word {
+    animation: none;
+  }
+}
