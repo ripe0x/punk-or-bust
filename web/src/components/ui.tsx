@@ -56,8 +56,15 @@ export function TxStatus({ state }: { state: TxState }) {
           : state.error ?? 'Failed.';
   return (
     <p className={`tx tx-${state.phase}`} role="status">
+      {state.step ? <span className="muted">Step {state.step.n} of {state.step.of} · </span> : null}
       {state.label ? <strong>{state.label}: </strong> : null}
       {text} {state.hash ? <TxLink hash={state.hash} label="View tx" /> : null}
+      {state.phase === 'wallet' ? (
+        <>
+          <br />
+          <span className="small muted">A smart-account wallet may preview this as &quot;No Changes&quot;. The transaction is real.</span>
+        </>
+      ) : null}
     </p>
   );
 }

@@ -8,7 +8,7 @@ import { fwaAbi } from '../abi/IFWA';
 import { chain, defaultKeeper, factoryAddress } from '../config';
 import { useCollectionPrices } from '../hooks/useCollectionPrices';
 import { useNow } from '../hooks/useNow';
-import { useTx } from '../hooks/useTx';
+import { useTx, type BatchStep } from '../hooks/useTx';
 import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks/useVault';
 import { CollectionThumb } from './CollectionThumb';
 import { useCollectionCounts, visibleCollections } from '../hooks/useCollectionCounts';
@@ -169,66 +169,44 @@ export function Setup({
     if (mode === 'create') {
       if (!factoryAddress) return;
       const value = checkedRun.value ?? 0n;
-      const ok = await tx.send('Start run', {
-        address: factoryAddress,
-        abi: factoryAbi,
-        functionName: 'createVault',
-        args: [collections, keepTokens, keepers, checkedRun.params, gasCheck.wei, more.autoReturn],
-        value,
-      });
-      if (!ok || !predicted) return;
-      let settingsFailed = false;
-      if (more.privateMode) {
-        if (!(await tx.send('Private mode', { address: predicted, abi: vaultAbi, functionName: 'setPrivateMode', args: [true] }))) {
-          settingsFailed = true;
-        }
+      const steps: BatchStep[] = [
+        {
+          label: 'Create your run',
+          call: { address: factoryAddress, abi: factoryAbi, functionName: 'createVault', args: [collections, keepTokens, keepers, checkedRun.params, gasCheck.wei, more.autoReturn], value },
+        },
+      ];
+      // The follow-up settings target the predicted vault address, which exists once createVault runs
+      // (same tx in a batch, the first tx otherwise).
+      if (predicted && more.privateMode) {
+        steps.push({ label: 'Private mode', call: { address: predicted, abi: vaultAbi, functionName: 'setPrivateMode', args: [true] } });
       }
-      if (bountyWei !== DEFAULT_BOUNTY || syncMaxWei !== DEFAULT_SYNC_BOUNTY_MAX) {
-        if (!(await tx.send('Bounties', { address: predicted, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] }))) {
-          settingsFailed = true;
-        }
+      if (predicted && (bountyWei !== DEFAULT_BOUNTY || syncMaxWei !== DEFAULT_SYNC_BOUNTY_MAX)) {
+        steps.push({ label: 'Bounties', call: { address: predicted, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] } });
       }
-      onDone(settingsFailed ? "Your run started, but some settings weren't saved. You can set them again under More on your run." : undefined);
+      if (await tx.sendBatch(steps, 'Start run')) onDone();
       return;
     }
 
     if (mode === 'start' && vault && vaultState) {
-      const diff = diffKeepList({ collections: events.settings.collections, tokens: events.settings.tokens }, { collections, tokens: keepTokens });
-      const steps = [
-        ['Remove keep collections', 'setKeepCollections', diff.removeCollections, false],
-        ['Remove keep tokens', 'setKeepTokens', diff.removeTokens, false],
-        ['Add keep collections', 'setKeepCollections', diff.addCollections, true],
-        ['Add keep tokens', 'setKeepTokens', diff.addTokens, true],
-      ] as const;
-      for (const [label, fn, list, keep] of steps) {
-        if (!list.length) continue;
-        if (!(await tx.send(label, { address: vault, abi: vaultAbi, functionName: fn, args: [list as never, keep] }))) return;
-      }
-      const newKeepers = keepers.filter((k) => !events.settings.keepers.some((e) => e.toLowerCase() === k.toLowerCase()));
-      if (newKeepers.length) {
-        if (!(await tx.send('Add keeper', { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [newKeepers, true] }))) return;
-      }
-      if (gasCheck.wei !== vaultState.gasCeiling) {
-        if (!(await tx.send('Gas ceiling', { address: vault, abi: vaultAbi, functionName: 'setGasCeiling', args: [gasCheck.wei] }))) return;
-      }
-      if (more.autoReturn !== vaultState.autoReturn) {
-        if (!(await tx.send('Auto-return', { address: vault, abi: vaultAbi, functionName: 'setAutoReturn', args: [more.autoReturn] }))) return;
-      }
-      if (more.privateMode !== vaultState.privateMode) {
-        if (!(await tx.send('Private mode', { address: vault, abi: vaultAbi, functionName: 'setPrivateMode', args: [more.privateMode] })))
-          return;
-      }
-      if (bountyWei !== vaultState.bountyWei || syncMaxWei !== vaultState.syncBountyMaxWei) {
-        if (!(await tx.send('Bounties', { address: vault, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] })))
-          return;
-      }
       const value = checkedRun.value ?? 0n;
       if (value === 0n && vaultState.idle === 0n) {
         setAmountError('Add ETH to start a run.');
         return;
       }
-      const ok = await tx.send('Start run', { address: vault, abi: vaultAbi, functionName: 'startRun', args: [checkedRun.params], value });
-      if (ok) onDone();
+      const diff = diffKeepList({ collections: events.settings.collections, tokens: events.settings.tokens }, { collections, tokens: keepTokens });
+      const newKeepers = keepers.filter((k) => !events.settings.keepers.some((e) => e.toLowerCase() === k.toLowerCase()));
+      const steps: BatchStep[] = [];
+      if (diff.removeCollections.length) steps.push({ label: 'Update your picks', call: { address: vault, abi: vaultAbi, functionName: 'setKeepCollections', args: [diff.removeCollections, false] } });
+      if (diff.removeTokens.length) steps.push({ label: 'Update your picks', call: { address: vault, abi: vaultAbi, functionName: 'setKeepTokens', args: [diff.removeTokens, false] } });
+      if (diff.addCollections.length) steps.push({ label: 'Save your picks', call: { address: vault, abi: vaultAbi, functionName: 'setKeepCollections', args: [diff.addCollections, true] } });
+      if (diff.addTokens.length) steps.push({ label: 'Save your picks', call: { address: vault, abi: vaultAbi, functionName: 'setKeepTokens', args: [diff.addTokens, true] } });
+      if (newKeepers.length) steps.push({ label: 'Add helpers', call: { address: vault, abi: vaultAbi, functionName: 'setKeepers', args: [newKeepers, true] } });
+      if (gasCheck.wei !== vaultState.gasCeiling) steps.push({ label: 'Gas ceiling', call: { address: vault, abi: vaultAbi, functionName: 'setGasCeiling', args: [gasCheck.wei] } });
+      if (more.autoReturn !== vaultState.autoReturn) steps.push({ label: 'Auto-return', call: { address: vault, abi: vaultAbi, functionName: 'setAutoReturn', args: [more.autoReturn] } });
+      if (more.privateMode !== vaultState.privateMode) steps.push({ label: 'Private mode', call: { address: vault, abi: vaultAbi, functionName: 'setPrivateMode', args: [more.privateMode] } });
+      if (bountyWei !== vaultState.bountyWei || syncMaxWei !== vaultState.syncBountyMaxWei) steps.push({ label: 'Bounties', call: { address: vault, abi: vaultAbi, functionName: 'setBounties', args: [bountyWei, syncMaxWei] } });
+      steps.push({ label: 'Deposit and start', call: { address: vault, abi: vaultAbi, functionName: 'startRun', args: [checkedRun.params], value } });
+      if (await tx.sendBatch(steps, 'Start run')) onDone();
     }
   }
 
