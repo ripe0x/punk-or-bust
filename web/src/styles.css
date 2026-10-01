@@ -531,6 +531,10 @@ label.search input:focus {
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+.list-card.scroll {
+  max-height: 440px;
+  overflow-y: auto;
+}
 .coll-row {
   display: flex;
   align-items: center;

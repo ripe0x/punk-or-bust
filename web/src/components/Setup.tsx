@@ -18,11 +18,9 @@ import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimat
 import { formatEth, formatEthFixed, formatGwei, parseEthInput } from '../lib/format';
 import { diffKeepList, type KeepToken } from '../lib/keepList';
 import { checkGasCeiling, checkRunForm, defaultMaxPullCostWei, defaultRunForm, parseAddresses, type RunForm } from '../lib/runParams';
-import { Picker } from './Picker';
 import { defaultMoreForm, SetupMore, type MoreForm } from './SetupMore';
 import { TxStatus } from './ui';
 
-const TOP_N = 6;
 
 export function Setup({
   isConnected,
@@ -72,7 +70,7 @@ export function Setup({
   const [more, setMore] = useState<MoreForm>(defaultMoreForm());
   const [spendEth, setSpendEth] = useState('1.00');
   const [stopPct, setStopPct] = useState(30);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
   const [tried, setTried] = useState(false);
   const [amountError, setAmountError] = useState<string | null>(null);
@@ -103,7 +101,11 @@ export function Setup({
   }, [quoteTotal]);
 
   const shown = useMemo(() => visibleCollections(COLLECTIONS, counts), [counts]);
-  const sortedTop = useMemo(() => sortCollections(shown, askWei).slice(0, TOP_N), [shown, askWei]);
+  const sortedShown = useMemo(() => sortCollections(shown, askWei), [shown, askWei]);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? sortedShown.filter((c) => displayName(c).toLowerCase().includes(q) || c.address.toLowerCase().includes(q)) : sortedShown;
+  }, [sortedShown, query]);
 
   const weightedBackingTotal = (poolStats.data?.[0]?.result as bigint | undefined) ?? 0n;
   const totalWeight = (poolStats.data?.[1]?.result as bigint | undefined) ?? 0n;
@@ -271,19 +273,18 @@ export function Setup({
               ) : null}
             </div>
           ) : null}
-          <button type="button" className="search" onClick={() => setPickerOpen(true)} aria-label={`Search ${shown.length} collections`}>
+          <label className="search">
             <SearchIcon />
-            <span style={{ color: 'var(--text-3)', fontSize: 16 }}>Search {shown.length} collections</span>
-          </button>
-          <div className="list-card">
-            {sortedTop.map((c) => (
+            <input type="search" placeholder={`Search ${shown.length} collections`} value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search collections" />
+          </label>
+          <div className="list-card scroll">
+            {filtered.map((c) => (
               <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
+            {filtered.length === 0 ? <p className="empty">No collections match.</p> : null}
           </div>
           <div className="row-between">
-            <button type="button" className="btn-link" onClick={() => setPickerOpen(true)}>
-              Show all {shown.length} collections
-            </button>
+            <span className="small muted">{query.trim() ? `${filtered.length} of ${shown.length}` : `${shown.length} collections`}</span>
             <span className="count-pill">{selected.size} picked</span>
           </div>
         </fieldset>
@@ -387,9 +388,6 @@ export function Setup({
         ) : null}
       </form>
 
-      {pickerOpen ? (
-        <Picker collections={COLLECTIONS} askWei={askWei} selected={new Set(selected.keys())} onToggle={toggle} onClose={() => setPickerOpen(false)} />
-      ) : null}
       {moreOpen ? (
         <SetupMore
           run={run}
