@@ -56,6 +56,7 @@ export function Setup({
           { address: fwa, abi: fwaAbi, functionName: 'weightedBackingTotal' },
           { address: fwa, abi: fwaAbi, functionName: 'totalWeight' },
           { address: fwa, abi: fwaAbi, functionName: 'settlementDiscountBps' },
+          { address: fwa, abi: fwaAbi, functionName: 'activeListingCount' },
         ] as const)
       : [],
     query: { enabled: !!fwa, refetchInterval: 30_000 },
@@ -101,7 +102,6 @@ export function Setup({
   }, [quoteTotal]);
 
   const shown = useMemo(() => visibleCollections(COLLECTIONS, counts), [counts]);
-  const poolInventory = useMemo(() => shown.reduce((sum, c) => sum + (counts.counts[c.address.toLowerCase()]?.count ?? 0), 0), [shown, counts.counts]);
   const sortedShown = useMemo(() => sortCollections(shown, askWei), [shown, askWei]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,6 +111,7 @@ export function Setup({
   const weightedBackingTotal = (poolStats.data?.[0]?.result as bigint | undefined) ?? 0n;
   const totalWeight = (poolStats.data?.[1]?.result as bigint | undefined) ?? 0n;
   const settlementDiscountBps = (poolStats.data?.[2]?.result as bigint | undefined) ?? 0n;
+  const activeListings = poolStats.data?.[3]?.result as bigint | undefined;
   const sellBack = expectedSellBack(weightedBackingTotal, totalWeight, settlementDiscountBps);
   const cost = quote ? costPerPull(quote.total, sellBack, 0n) : 0n;
   const spendWei = parseEthInput(spendEth) ?? 0n;
@@ -253,9 +254,9 @@ export function Setup({
             What do you want to keep?
           </legend>
           <p className="form-lede">Pull one of these and it goes to your wallet. Everything else is sold back to pay for more pulls.</p>
-          {counts.loaded && poolInventory > 0 ? (
+          {activeListings !== undefined && activeListings > 0n && shown.length > 0 ? (
             <p className="pool-inventory">
-              <span className="num">{poolInventory.toLocaleString()}</span> NFTs across <span className="num">{shown.length}</span> collections in the pool.
+              <span className="num">{Number(activeListings).toLocaleString()}</span> NFTs across <span className="num">{shown.length}</span> collections in the pool.
             </p>
           ) : null}
           {hasPrices ? (
