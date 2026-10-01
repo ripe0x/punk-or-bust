@@ -12,6 +12,8 @@ import { useTx, type BatchStep } from '../hooks/useTx';
 import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks/useVault';
 import { CollectionThumb } from './CollectionThumb';
 import { useCollectionCounts, visibleCollections } from '../hooks/useCollectionCounts';
+import { useCollectionWeights } from '../hooks/useCollectionWeights';
+import { formatOddsPercent } from '../lib/odds';
 import { COLLECTIONS, collectionMeta, displayName, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
@@ -44,6 +46,7 @@ export function Setup({
   const tx = useTx();
   const { askWei } = useCollectionPrices(fwa);
   const counts = useCollectionCounts();
+  const weights = useCollectionWeights();
   const { openConnectModal } = useConnectModal();
   const { address, chainId: walletChainId } = useAccount();
   const { switchChainAsync, isPending: switching } = useSwitchChain();
@@ -278,7 +281,7 @@ export function Setup({
           </label>
           <div className="list-card scroll">
             {filtered.map((c) => (
-              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
+              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={weights.byAddr[c.address.toLowerCase()]?.count ?? (counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined)} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} odds={formatOddsPercent(weights.byAddr[c.address.toLowerCase()]?.weight, weights.totalWeight)} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
             {filtered.length === 0 ? <p className="empty">No collections match.</p> : null}
           </div>
@@ -406,13 +409,16 @@ export function Setup({
   );
 }
 
-function TopRow({ address, image, name, count, sample, price, on, onToggle }: { address: Address; image?: string; name: string; count: number | undefined; sample?: string; price: bigint | undefined; on: boolean; onToggle: () => void }) {
+function TopRow({ address, image, name, count, sample, price, odds, on, onToggle }: { address: Address; image?: string; name: string; count: number | undefined; sample?: string; price: bigint | undefined; odds?: string; on: boolean; onToggle: () => void }) {
   return (
     <label className="coll-row">
       <CollectionThumb address={address} image={image} sampleTokenId={sample} />
       <div className="coll-info">
         <div className="coll-name">{name}</div>
-        <div className="coll-meta mono">{collectionMeta(count, price)}</div>
+        <div className="coll-meta mono">
+          {collectionMeta(count, price)}
+          {odds ? <span className="coll-odds"> · {odds} per pull</span> : null}
+        </div>
       </div>
       <input type="checkbox" className="checkbox" checked={on} onChange={onToggle} />
     </label>
