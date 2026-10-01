@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, useBalance, useReadContracts, useSwitchChain } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { Address } from 'viem';
@@ -13,7 +13,7 @@ import { useFactoryFwa, useQuote, useVaultEvents, useVaultState } from '../hooks
 import { CollectionThumb } from './CollectionThumb';
 import { useCollectionCounts, visibleCollections } from '../hooks/useCollectionCounts';
 import { useCollectionWeights } from '../hooks/useCollectionWeights';
-import { formatOddsPercent } from '../lib/odds';
+import { formatOddsRatio } from '../lib/odds';
 import { COLLECTIONS, collectionMeta, displayName, sortCollections } from '../lib/collections';
 import { DEFAULT_BOUNTY, DEFAULT_SYNC_BOUNTY_MAX } from '../lib/constants';
 import { costPerPull, estimatePullRange, expectedSellBack } from '../lib/estimate';
@@ -281,7 +281,7 @@ export function Setup({
           </label>
           <div className="list-card scroll">
             {filtered.map((c) => (
-              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={weights.byAddr[c.address.toLowerCase()]?.count ?? (counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined)} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} odds={formatOddsPercent(weights.byAddr[c.address.toLowerCase()]?.weight, weights.totalWeight)} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
+              <TopRow key={c.address} address={c.address} image={c.image} name={displayName(c)} count={weights.byAddr[c.address.toLowerCase()]?.count ?? (counts.loaded ? counts.counts[c.address.toLowerCase()]?.count : undefined)} sample={counts.counts[c.address.toLowerCase()]?.sampleTokenId} price={askWei[c.address.toLowerCase()]} odds={formatOddsRatio(weights.byAddr[c.address.toLowerCase()]?.weight, weights.totalWeight)} on={selected.has(c.address.toLowerCase())} onToggle={() => toggle(c.address)} />
             ))}
             {filtered.length === 0 ? <p className="empty">No collections match.</p> : null}
           </div>
@@ -410,14 +410,27 @@ export function Setup({
 }
 
 function TopRow({ address, image, name, count, sample, price, odds, on, onToggle }: { address: Address; image?: string; name: string; count: number | undefined; sample?: string; price: bigint | undefined; odds?: string; on: boolean; onToggle: () => void }) {
+  // Each phrase is a non-breaking segment; the line wraps only at the spaces between segments, so no
+  // word is ever orphaned. The separator is glued to the end of its phrase so a "·" never starts a
+  // line alone.
+  const segs = collectionMeta(count, price).split(' · ').filter(Boolean);
+  if (odds) segs.push(`${odds} per pull`);
+  const lastIsOdds = Boolean(odds);
   return (
     <label className="coll-row">
       <CollectionThumb address={address} image={image} sampleTokenId={sample} />
       <div className="coll-info">
         <div className="coll-name">{name}</div>
         <div className="coll-meta mono">
-          {collectionMeta(count, price)}
-          {odds ? <span className="coll-odds"> · {odds} per pull</span> : null}
+          {segs.map((s, i) => (
+            <Fragment key={i}>
+              {i > 0 ? ' ' : null}
+              <span className={lastIsOdds && i === segs.length - 1 ? 'coll-seg coll-odds' : 'coll-seg'}>
+                {s}
+                {i < segs.length - 1 ? ' ·' : null}
+              </span>
+            </Fragment>
+          ))}
         </div>
       </div>
       <input type="checkbox" className="checkbox" checked={on} onChange={onToggle} />

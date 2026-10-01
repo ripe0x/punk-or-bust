@@ -593,9 +593,15 @@ label.search input:focus {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.coll-odds {
+  color: var(--ink);
+}
 .coll-meta {
   font-size: 13px;
   color: var(--text-3);
+}
+.coll-seg {
+  white-space: nowrap;
 }
 .checkbox {
   width: 24px;
