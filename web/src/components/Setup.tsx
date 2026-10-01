@@ -134,8 +134,20 @@ export function Setup({
   // a one tap premium tier the owner can then refine. UI only; it just fills the keep list, so
   // collections not in the pool now (or listed later) are not covered.
   const hasPrices = shown.some((c) => (askWei[c.address.toLowerCase()] ?? 0n) > 0n);
+  const THRESHOLDS: [string, bigint][] = [
+    ['≥ 0.1', 10n ** 17n],
+    ['≥ 0.5', 5n * 10n ** 17n],
+    ['≥ 1 ETH', 10n ** 18n],
+  ];
+  const atLeast = (minWei: bigint) => shown.filter((c) => (askWei[c.address.toLowerCase()] ?? 0n) >= minWei);
   function keepAtLeast(minWei: bigint) {
-    setSelected(new Map(shown.filter((c) => (askWei[c.address.toLowerCase()] ?? 0n) >= minWei).map((c) => [c.address.toLowerCase(), c.address])));
+    setSelected(new Map(atLeast(minWei).map((c) => [c.address.toLowerCase(), c.address])));
+  }
+  // A threshold chip is active when the keep list is exactly its set, so a later manual edit clears it.
+  function thresholdActive(minWei: bigint): boolean {
+    if (selected.size === 0) return false;
+    const match = atLeast(minWei);
+    return match.length === selected.size && match.every((c) => selected.has(c.address.toLowerCase()));
   }
 
   const runForm: RunForm = { ...run, amountEth: spendEth, drawdownPct: stopPct };
@@ -265,9 +277,11 @@ export function Setup({
           {hasPrices ? (
             <div className="keep-presets">
               <span className="keep-presets-label">Skip commons, keep floor</span>
-              <button type="button" className="chip" onClick={() => keepAtLeast(10n ** 17n)}>&ge; 0.1</button>
-              <button type="button" className="chip" onClick={() => keepAtLeast(5n * 10n ** 17n)}>&ge; 0.5</button>
-              <button type="button" className="chip" onClick={() => keepAtLeast(10n ** 18n)}>&ge; 1 ETH</button>
+              {THRESHOLDS.map(([label, min]) => (
+                <button key={label} type="button" className={`chip${thresholdActive(min) ? ' on' : ''}`} aria-pressed={thresholdActive(min)} onClick={() => keepAtLeast(min)}>
+                  {label}
+                </button>
+              ))}
               {selected.size > 0 ? (
                 <button type="button" className="chip ghost" onClick={() => setSelected(new Map())}>Clear</button>
               ) : null}

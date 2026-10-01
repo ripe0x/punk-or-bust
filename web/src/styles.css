@@ -492,6 +492,11 @@ form.stack {
 .chip:hover {
   border-color: var(--ink);
 }
+.chip.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
 .chip.ghost {
   border-style: dashed;
   color: var(--text-3);
