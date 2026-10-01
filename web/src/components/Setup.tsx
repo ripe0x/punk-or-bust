@@ -101,6 +101,7 @@ export function Setup({
   }, [quoteTotal]);
 
   const shown = useMemo(() => visibleCollections(COLLECTIONS, counts), [counts]);
+  const poolInventory = useMemo(() => shown.reduce((sum, c) => sum + (counts.counts[c.address.toLowerCase()]?.count ?? 0), 0), [shown, counts.counts]);
   const sortedShown = useMemo(() => sortCollections(shown, askWei), [shown, askWei]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -252,6 +253,11 @@ export function Setup({
             What do you want to keep?
           </legend>
           <p className="form-lede">Pull one of these and it goes to your wallet. Everything else is sold back to pay for more pulls.</p>
+          {counts.loaded && poolInventory > 0 ? (
+            <p className="pool-inventory">
+              <span className="num">{poolInventory.toLocaleString()}</span> NFTs across <span className="num">{shown.length}</span> collections in the pool.
+            </p>
+          ) : null}
           {hasPrices ? (
             <div className="keep-presets">
               <span className="keep-presets-label">Skip commons, keep floor</span>

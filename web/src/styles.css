@@ -461,6 +461,15 @@ form.stack {
   line-height: 1.5;
   color: var(--text-2);
 }
+.pool-inventory {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-3);
+}
+.pool-inventory .num {
+  color: var(--ink);
+  font-weight: 600;
+}
 .fieldset {
   display: flex;
   flex-direction: column;
