@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { configProblems } from './config';
+import { configProblems, factoryAddress } from './config';
+import { addressUrl } from './lib/links';
 import { navigate, useRoute, type Route } from './router';
 import { useOwnerVault } from './hooks/useVault';
 import { Auctions } from './components/Auctions';
@@ -93,7 +94,11 @@ export function App() {
       {route.page !== 'setup' ? (
         <footer className="site">
           <a href="/faq">FAQ</a>
-          <a href="#contracts">Contracts</a>
+          {factoryAddress ? (
+            <a href={addressUrl(factoryAddress)} target="_blank" rel="noreferrer">
+              Factory
+            </a>
+          ) : null}
           <a href="#source">Source</a>
           <span>Built on FWA</span>
         </footer>

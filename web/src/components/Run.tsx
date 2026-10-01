@@ -15,7 +15,7 @@ import { formatDuration, formatEth, parseEthInput, windDownReasonLabel } from '.
 import { secondsLeft, type OpenAuction } from '../lib/auction';
 import { PullDetail } from './PullDetail';
 import { RoundChart, type DeltaPull } from './RoundChart';
-import { Section, TxStatus } from './ui';
+import { Addr, Section, TxStatus } from './ui';
 import { Settings } from './Settings';
 import { Sweep } from './Sweep';
 
@@ -238,7 +238,7 @@ function RunCard({
         </span>
         <span className="small muted">
           {state.pullsRequested.toString()} pulls
-          {active ? ` · ${state.keeps.toString()} kept · ${sold} sold` : ''}
+          {active ? ` · ${state.keeps.toString()} kept · ${sold} sold` : ''} · <Addr address={vault} />
         </span>
       </div>
       <div className="run-value">
